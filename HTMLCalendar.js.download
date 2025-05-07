@@ -1,0 +1,2100 @@
+/**
+ * Método construtor do HTMLCalendar. Responsável por criar o componente Calendário.
+ * @param sys Indica o código do sistema.
+ * @param formID Indica o código do formulário.
+ * @param posX Posição do componente na tela em relação ao eixo X.
+ * @param posY Posição do componente na tela em relação ao eixo Y.
+ * @param width Largura do componente.
+ * @param heigth Altura do componente.
+ * @param description Descricao do componente.
+ * @param value Valor do componente.
+ **/
+ function HTMLCalendar(sys, formID, code, posX, posY, width, height, description, value, showValue) {
+  this.create(sys, formID, code, posX, posY, width, height, description, value);
+
+  this.selectedDate = null;
+  this.selectedTime = null;
+
+  this.hoveredDate = null;
+  this.hoveredTime = null;
+
+  this.selectedDateTime = null;
+
+  // Verificar se é mobile.
+  this.mobile = isMobile();
+
+  // Obter o formato da data do formulário.
+  if (mainform && mainform.DATE_PATTERN) {
+    this.dateTimeFormat = mainform.DATE_PATTERN.toUpperCase() + " " + mainform.TIME_PATTERN;
+    this.dateFormat = mainform.DATE_PATTERN.toUpperCase();
+    this.timeFormat = mainform.TIME_PATTERN;
+  } else {
+    // Não encontrado, utilizar o formato UTC.
+    this.dateTimeFormat = utcDateFormat + " " + utcTimeFormat;
+    this.dateFormat = utcDateFormat;
+    this.timeFormat = utcTimeFormat;
+  }
+}
+
+/**
+ * Herança do objeto.
+ **/
+HTMLCalendar.inherits(HTMLElementBase);
+HTMLCalendar.prototype.logedOnGoogle = false;
+
+/**
+ * Setando propriedades do componente.
+ **/
+HTMLCalendar.prototype.name = "HTMLCalendar";
+HTMLCalendar.prototype.tabable = true;
+
+HTMLCalendar.prototype.instance = HTMLCalendar;
+
+HTMLCalendar.prototype.utcDateFormat = "YYYY-MM-DD";
+HTMLCalendar.prototype.utcTimeFormat = "HH:mm:ss";
+
+HTMLCalendar.prototype.requestDateTimeFormat = "yyyy-MM-dd HH:mm:ss";
+
+/**
+ * Responsável por desenhar o HTML do componente Calendário.
+ * @param doc documento onde o componente será inserido.
+ **/
+HTMLCalendar.prototype.designComponent = function(doc) {
+  let object = this;
+
+  // Obter propriedades do componente e dar parse nelas.
+  if (this.Navegacao && this.Navegacao.length) {
+    this.navigation = (this.Navegacao.toLowerCase() == "true");
+  } else this.navigation = true;
+
+  if (this.Editavel && this.Editavel.length) {
+    this.editable = (this.Editavel.toLowerCase() == "true");
+  } else this.editable = true;
+
+  if (this.ExibirNumerosDosDias && this.ExibirNumerosDosDias.length) {
+    this.weekNumbers = (this.ExibirNumerosDosDias.toLowerCase() == "true");
+  } else this.weekNumbers = true;
+
+  if (this.ExibirBotaoHoje && this.ExibirBotaoHoje.length) {
+    this.showTodayButton = (this.ExibirBotaoHoje.toLowerCase() == "true");
+  } else this.showTodayButton = true;
+
+  if (this.ExibirTitulo && this.ExibirTitulo.length) {
+    this.showCalendarTitle = (this.ExibirTitulo.toLowerCase() == "true");
+  } else this.showCalendarTitle = true;
+
+  if (this.DestacarHorarioComercial && this.DestacarHorarioComercial.length) {
+    this.businessHours = (this.DestacarHorarioComercial.toLowerCase() == "true");
+  } else this.businessHours = true;
+
+  if (this.DestacarDiaAtual && this.DestacarDiaAtual.length) {
+    this.nowIndicator = (this.DestacarDiaAtual.toLowerCase() == "true");
+  } else this.nowIndicator = true;
+
+  if (this.PermitirAlterarModoDeVisualizacao && this.PermitirAlterarModoDeVisualizacao.length) {
+    this.canChangeViewMode = (this.PermitirAlterarModoDeVisualizacao.toLowerCase() == "true");
+  } else this.canChangeViewMode = true;
+
+  if (this.MenuDeContexto && this.MenuDeContexto.length) {
+    this.hasDropdownMenu = (this.MenuDeContexto.toLowerCase() == "true");
+  } else this.hasDropdownMenu = true;
+
+  if (this.ModoDeVisualizacao && this.ModoDeVisualizacao.length) {
+    switch (this.ModoDeVisualizacao) {
+      case "1": this.defaultView = "dayGridMonth"; break;
+      case "2": this.defaultView = "timeGridWeek"; break;
+      case "3": this.defaultView = "timeGridDay"; break;
+      default: this.defaultView = "dayGridMonth"; break;
+    }
+  } else this.defaultView = "dayGridMonth";
+
+  // Criar a div do calendário
+  this.calendarDiv = document.createElement("div");
+  this.context.appendChild(this.calendarDiv);
+
+  // Importar o moment.js
+  webrun.include("assets/moment.min.js");
+
+  // Importar o CSS do Bootstrap Datetimepicker
+  if (!document.getElementById("datetimepicker-css")) {
+    let head = document.getElementsByTagName("head")[0];
+    let link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.type = "text/css";
+    link.href = "assets/bootstrap-datetimepicker.min.css";
+    link.id = "datetimepicker-css";
+    head.appendChild(link);
+  }
+
+  // Importar o script do Bootstrap Datetimepicker
+  webrun.include("assets/bootstrap-datetimepicker.min.js");
+
+  // Importar o script do FullCalendar
+  webrun.include("components/fullcalendar/main.min.js");
+  webrun.include("components/fullcalendar/locales-all.min.js");
+
+  // Preparar o locale do calendário
+  let definedLocale = resources_locale.toLowerCase();
+  if (definedLocale == "en_us") this.locale = "en";
+  else if (definedLocale == "pt_br") this.locale = "pt-br";
+  else if (definedLocale == "es_es") this.locale = "es";
+  else if (definedLocale == "fr_fr") this.locale = "fr";
+  else this.locale = "en";
+
+  // Definir o locale do Moment
+  moment.locale(this.locale);
+
+  // Criar a instância do FullCalendar
+  this.calendar = new FullCalendar.Calendar(this.calendarDiv, {
+    // Tema do Bootstrap
+    themeSystem: "bootstrap5",
+
+    // Visualização de dia e mês
+    initialView: this.defaultView,
+
+    // Propriedades
+    editable: this.canEdit(),
+    dayMaxEventRows: true,
+    eventResizableFromStart: this.canEditResizing(),
+    eventStartEditable: this.canEditDragging(),
+    eventDurationEditable: this.canEditResizing(),
+    droppable: this.canEditDragging(),
+    nowIndicator: this.nowIndicator,
+    selectable: true,
+    weekNumbers: this.weekNumbers,
+    navLinks: this.canChangeViewMode ? true : false,
+    businessHours: this.businessHours,
+    height: this.height,
+    titleRangeSeparator: " - ",
+
+    // Propriedades da Toolbar
+    headerToolbar: (this.navigation ? {
+      left: this.showTodayButton ? "prev,next today" : "prev,next",
+      center: this.showCalendarTitle ? "title" : "",
+      right: this.canChangeViewMode ? "dayGridMonth,timeGridWeek,timeGridDay" : ""
+    } : false),
+
+    // Definir o idioma
+    locale: this.locale,
+
+    // Definir ícones dos botões
+    buttonIcons: {
+      close: " fas fa-times",
+      prev: " fas fa-chevron-left",
+      next: " fas fa-chevron-right",
+      prevYear: " fas fa-angle-double-left",
+      nextYear: " fas fa-angle-double-right",
+    },
+
+    // Associar eventos ao FullCalendar
+    select: function(arg) { // Ocorre ao selecionar uma data
+      object.selectDateAction(arg);
+    },
+
+    dateClick: function(arg) { // Ocorre ao clicar numa data
+      // Verificar se o calendário possui o evento "Ao Clicar No Dia".
+      if (object.AoClicarNoDia) {
+        // Chamar o evento "Ao Clicar No Dia".
+        object.AoClicarNoDia.call(this, moment(arg.date).format(object.dateFormat));
+      } else if (object.mobile) {
+        object.addEventAction();
+      }
+    },
+
+    datesSet: function(arg) { // Ocorre ao atualizar/renderizar o calendário
+      object.hoveredDate = null;
+      object.hoveredTime = null;
+
+      // Obter a data que está sendo exibida na view.
+      let previousDate = object.currentDate, dateChanged = false;
+      object.currentDate = arg.view.currentEnd;
+
+      // Verificar se o ano atual no calendário mudou.
+      if (previousDate && object.currentDate.getFullYear() != previousDate.getFullYear()) {
+        dateChanged = true;
+
+        // Verificar se o calendário possui o evento "Ao Modificar Ano".
+        if (object.AoModificarAno) {
+          object.AoModificarAno.call(object, object.currentDate.getFullYear());
+        }
+      }
+
+      // Verificar se o mês atual no calendário mudou.
+      if (previousDate && object.currentDate.getMonth() != previousDate.getMonth()) {
+        dateChanged = true;
+
+        // Verificar se o calendário possui o evento "Ao Modificar Mês".
+        if (object.AoModificarMes) {
+          object.AoModificarMes.call(object, (object.currentDate.getMonth() + 1));
+        }
+      }
+
+      // Verificar se o ano ou o mês atual no calendário mudou
+      if (dateChanged) {
+        object.updateData(); // Atualizar dados
+      }
+
+      if (arg.el) {
+        // Associar eventos nas células dos dias.
+        let dayCells = arg.el.querySelectorAll("td.fc-day, td.fc-day-top");
+        for (let i = 0; i < dayCells.length; i++) {
+          let dayCell = dayCells[i];
+
+          // Adicionar evento de mouse enter/leave na célula do dia para guardar a data que o mouse está em cima.
+          if (dayCell) {
+            dayCell.addEventListener("mouseenter", function(e) { // Ocorre quando o mouse entra na célula do dia.
+              // Definir "hoveredDate" para a data desta célula.
+              let date = e.currentTarget.getAttribute("data-date");
+              if (date != null) object.hoveredDate = date;
+            });
+
+            dayCell.addEventListener("mouseleave", function(e) { // Ocorre quando o mouse sai na célula do dia.
+              let date = e.currentTarget.getAttribute("data-date");
+              if (date != null && date == object.hoveredDate) object.hoveredDate = null;
+            });
+          }
+        }
+
+        // Associar eventos nas células das horas.
+        let timeCells = arg.el.querySelectorAll("td.fc-timegrid-slot");
+        for (let i = 0; i < timeCells.length; i++) {
+          let timeCell = timeCells[i];
+
+          // Adicionar evento de mouse enter/leave na célula da hora para guardar o horário que o mouse está em cima.
+          if (timeCell) {
+            timeCell.addEventListener("mouseenter", function(e) { // Ocorre quando o mouse entra na célula da hora
+              // Definir "hoveredTime" para a data desta célula.
+              let time = e.currentTarget.getAttribute("data-time");
+              if (time != null) object.hoveredTime = time;
+            });
+
+            timeCell.addEventListener("mouseleave", function(e) { // Ocorre quando o mouse sai na célula da hora
+              let time = e.currentTarget.getAttribute("data-time");
+              if (time != null && time == object.hoveredTime) object.hoveredTime = null;
+            });
+          }
+        }
+
+        // Remover eventos do mouse no overlay
+        let bgEvents = arg.el.getElementsByClassName("fc-bgevent-skeleton");
+        for (let i = 0; i < bgEvents.length; i++) {
+          let bgEvent = bgEvents[i];
+          if (bgEvent) bgEvent.style.pointerEvents = "none";
+        }
+      }
+
+      // Atualizar o tamanho do calendário.
+      setTimeout(function() {
+        object.calendar.updateSize();
+      }, 500);
+
+      // Atualizar o layout do calendário.
+      object.updateLayout();
+    },
+
+    eventDidMount: function(arg) { // Ocorre ao renderizar um evento
+      if (arg.el) {
+        arg.el.addEventListener("mouseenter", function() { // Ocorre quando o mouse entra na célula do evento
+          // Definir "hoveredEvent" para o evento desta célula.
+          object.hoveredEvent = arg.event;
+          object.lastHoveredEvent = object.hoveredEvent;
+        });
+
+        arg.el.addEventListener("mouseleave", function() { // Ocorre quando o mouse sai na célula do evento
+          if (arg.event == object.hoveredEvent) object.hoveredEvent = null;
+        });
+
+        // Verificar se o calendário possui ações nos eventos.
+        if (object.hasActionInEvents()) {
+          // Definir cursor ao evento.
+          arg.el.style.cursor = "pointer";
+        }
+      }
+    },
+
+    eventClick: function(arg) { // Ocorre ao clicar no evento
+      // Verificar se o calendário possui o evento "Ao Clicar no Evento".
+      if (object.AoClicarNoEvento) {
+        // Chamar o evento "Ao Clicar no Evento".
+        object.AoClicarNoEvento.call(object, arg.event);
+      } else {
+        // Criar o modal de editar evento.
+        object.createEventModal(1, arg.event.start, arg.event.end, arg.event.allDay, arg.event);
+      }
+    },
+
+    eventDrop: function(arg) { // Ocorre ao quando um evento é movido
+      // Verificar se o calendário pode editar eventos movendo.
+      if (object.canEditDragging()) {
+        // Verificar se o calendário possui o evento "Ao Mover Evento".
+        if (object.AoMoverEvento) {
+          // Chamar o evento "Ao Mover Evento".
+          object.AoMoverEvento.call(object, arg.event);
+        } else {
+          // Editar evento.
+          // Caso seja Google Calendar enviar informações no padrão esperado
+          if(object.hasGoogleCalendar){
+            let g_event = {
+              summary: arg.event.title,
+              location: arg.event._def.extendedProps.location,
+              description: arg.event._def.extendedProps.description,
+              start: {
+                dateTime: arg.event.start.toISOString(),
+                timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+              },
+              end: {
+                dateTime:  arg.event.end.toISOString(),
+                timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+              },
+              attendees: arg.event._def.extendedProps.attendees ? arg.event._def.extendedProps.attendees : null,
+              recurrence:{ 
+                freq: "Daily",
+                count: 1
+              }
+            }
+            g_event.id = arg.event.id;
+            object.editEvent(g_event, arg.event.title,
+              arg.event.start.format(object.utcDateFormat + " " + object.utcTimeFormat),
+              arg.event.end.format(object.utcDateFormat + " " + object.utcTimeFormat), 2);
+          } else {
+            object.editEvent(arg.event, arg.event.title, arg.event.start, arg.event.end, 2);
+          }
+        }
+      }
+    },
+
+    eventResize: function(arg) { // Ocorre ao quando um evento é redimensionado
+      // Verificar se o calendário pode editar eventos redimensionando.
+      if (object.canEditResizing()) {
+        // Verificar se o calendário possui o evento "Ao Redimensionar Evento".
+        if (object.AoRedimensionarEvento) {
+          // Chamar o evento "Ao Mover Evento".
+          object.AoRedimensionarEvento.call(object, arg.event);
+        } else {
+          // Editar evento.
+          object.editEvent(arg.event, arg.event.title, arg.event.start, arg.event.end, 2);
+        }
+      }
+    },
+  });
+
+  if (this.hasDropdownMenu) {
+
+    // Criar menu dropdown do calendário.
+    this.dropdownMenu = document.createElement("div");
+    this.dropdownMenu.className = "dropdown-menu"; // Bootstrap
+    this.dropdownMenu.id = "dropdown" + this.code + "-1";
+    this.dropdownMenuClass = this.dropdownMenu.className;
+    document.body.appendChild(this.dropdownMenu);
+
+    // Criar título do dropdown do calendário.
+    this.dropdownHeader = document.createElement("h6");
+    this.dropdownHeader.className = "dropdown-header"; // Bootstrap
+    this.dropdownHeader.innerHTML = getLocaleMessage("LABEL.CALENDAR");
+    this.dropdownMenu.appendChild(this.dropdownHeader);
+
+    // Criar item de atualizar calendário.
+    this.dropdownRefresh = document.createElement("a");
+    this.dropdownRefresh.href = "#";
+    this.dropdownRefresh.className = "dropdown-item"; // Bootstrap
+    this.dropdownRefresh.innerHTML = getLocaleMessage("LABEL.CALENDAR_UPDATE");
+    this.dropdownMenu.appendChild(this.dropdownRefresh);
+    this.attachEvent(this.dropdownRefresh, "click", this.updateCalendarAction);
+
+
+    // Criar item de ver eventos.
+    this.dropdownViewEvents = document.createElement("a");
+    this.dropdownViewEvents.href = "#";
+    this.dropdownViewEvents.className = "dropdown-item"; // Bootstrap
+    this.dropdownViewEvents.innerHTML = getLocaleMessage("LABEL.CALENDAR_VIEW_EVENTS");
+    this.dropdownMenu.appendChild(this.dropdownViewEvents);
+    this.attachEvent(this.dropdownViewEvents, "click", this.viewEventsAction);
+
+    if (this.editable) {
+      // Criar item de adicionar evento.
+      this.dropdownAddEvent = document.createElement("a");
+      this.dropdownAddEvent.href = "#";
+      this.dropdownAddEvent.className = "dropdown-item"; // Bootstrap
+      this.dropdownAddEvent.innerHTML = getLocaleMessage("LABEL.CALENDAR_ADD_EVENT");
+      this.dropdownMenu.appendChild(this.dropdownAddEvent);
+      this.attachEvent(this.dropdownAddEvent, "click", this.addEventAction);
+
+      // Criar menu dropdown dos eventos.
+      this.eventDropdownMenu = document.createElement("div");
+      this.eventDropdownMenu.className = "dropdown-menu"; // Bootstrap
+      this.eventDropdownMenu.id = "dropdown" + this.code + "-2";
+      this.eventDropdownMenuClass = this.eventDropdownMenu.className;
+      document.body.appendChild(this.eventDropdownMenu);
+
+      // Criar título do dropdown dos eventos.
+      this.eventDropdownHeader = document.createElement("h6");
+      this.eventDropdownHeader.className = "dropdown-header"; // Bootstrap
+      this.eventDropdownHeader.innerHTML = getLocaleMessage("LABEL.CALENDAR_EVENT");
+      this.eventDropdownTimeSpan = document.createElement("span");
+      this.eventDropdownTimeSpan.className = "badge bg-secondary ms-2";
+      this.eventDropdownHeader.appendChild(this.eventDropdownTimeSpan);
+      this.eventDropdownMenu.appendChild(this.eventDropdownHeader);
+
+      // Criar item de editar evento.
+      this.dropdownEditEvent = document.createElement("a");
+      this.dropdownEditEvent.href = "#";
+      this.dropdownEditEvent.className = "dropdown-item"; // Bootstrap
+      this.dropdownEditEvent.innerHTML = getLocaleMessage("LABEL.CALENDAR_EDIT_EVENT");
+      this.eventDropdownMenu.appendChild(this.dropdownEditEvent);
+      this.attachEvent(this.dropdownEditEvent, "click", this.editEventAction);
+
+      // Criar item de deletar evento.
+      this.dropdownDeleteEvent = document.createElement("a");
+      this.dropdownDeleteEvent.href = "#";
+      this.dropdownDeleteEvent.className = "dropdown-item"; // Bootstrap
+      this.dropdownDeleteEvent.innerHTML = getLocaleMessage("LABEL.CALENDAR_DELETE_EVENT");
+      this.eventDropdownMenu.appendChild(this.dropdownDeleteEvent);
+      this.attachEvent(this.dropdownDeleteEvent, "click", this.removeEventAction);
+    }
+    if(this.hasGoogleCalendar){
+      // Criar menu dropdown do calendário.
+      this.googleDivider = document.createElement("div");
+      this.googleDivider.className = "dropdown-divider"; // Bootstrap
+      this.dropdownMenu.appendChild(this.googleDivider);
+
+      // Criar título do dropdown do calendário.
+      this.googleHeader = document.createElement("h6");
+      this.googleHeader.className = "dropdown-header"; // Bootstrap
+      this.googleHeader.innerHTML = getLocaleMessage("LABEL.ACCOUNT");
+      this.eventDropdownEmailSpan = document.createElement("span");
+      this.eventDropdownEmailSpan.className = "badge bg-secondary ms-2";
+      this.googleHeader.appendChild(this.eventDropdownEmailSpan);
+      this.dropdownMenu.appendChild(this.googleHeader);
+
+      // Criar item de trocar conta Google
+      this.dropdownSwitchAccount = document.createElement("a");
+      this.dropdownSwitchAccount.href = "#";
+      this.dropdownSwitchAccount.className = "dropdown-item"; // Bootstrap
+      this.dropdownSwitchAccount.innerHTML = getLocaleMessage("LABEL.SWITCH_ACCOUNT");
+      this.dropdownMenu.appendChild(this.dropdownSwitchAccount);
+      this.attachEvent(this.dropdownSwitchAccount, "click", this.switchAccountGoogle);
+    }
+  }
+
+  // Criar o loader do calendário.
+  this.preloaderDiv = document.createElement("div");
+  this.preloaderDiv.className = "d-none"; // Bootstrap
+  this.preloaderDivClass = "position-absolute w-100 h-100 d-flex align-items-center justify-content-center text-center"; // Bootstrap
+  this.preloaderDiv.style.top = "0";
+  this.preloaderDiv.style.zIndex = "2";
+  this.div.appendChild(this.preloaderDiv);
+
+  this.preloader = document.createElement("div");
+  this.preloader.className = "spinner-border text-primary"; // Bootstrap
+  this.preloader.setAttribute("role", "status");
+  this.preloaderDiv.appendChild(this.preloader);
+
+  let preloaderSpan = document.createElement("span");
+  preloaderSpan.className = "visually-hidden"; // Bootstrap
+  preloaderSpan.innerHTML = getLocaleMessage("LABEL.LOADING") + "...";
+  this.preloader.appendChild(preloaderSpan);
+
+  // Associar eventos ao div do calendário.
+  this.attachEvent(this.div, "contextmenu", this.contextMenuAction);
+  this.attachEvent(this.calendarDiv, "contextmenu", this.contextMenuAction);
+
+  // Associar evento ao corpo da página.
+  this.attachEvent(document.body, "click", function() {
+    if (object) object.closeDropdownMenu();
+  });
+
+  // Associar evento a div do calendário.
+  this.attachEvent(this.div, "click", function() {
+    if (object) object.closeDropdownMenu();
+  });
+
+  // Associar evento de redimensionamento.
+  this.attachEvent(window, "resize", function() {
+    if (object) object.updateLayout();
+  });
+};
+
+/*
+ * Ocorre quando o formulário termina de carregar.
+ */
+HTMLCalendar.prototype.onFormLoadAction = function() {
+  // Atualiza o calendário
+  if (!this.loaded) {
+    this.updateCalendarAction();
+    this.loaded = true;
+  }
+};
+
+/*
+ * Ocorre após a inicialização do componente.
+ */
+HTMLCalendar.prototype.afterInit = function() {
+  this.callMethod(HTMLElementBase, "afterInit", []);
+
+  // NOTA: O FullCalendar precisa que a div pai esteja visível para
+  //       que ele seja renderizado. Portanto, devemos obter a aba
+  //       do componente e registrar o evento "onshown".
+
+  // Obter a aba relacionada a esse componente.
+  if (this.tab) {
+    let object = this;
+    let shownCallback = function(tabPane) {
+      // Desenhar o FullCalendar no formulário
+      object.calendar.render();
+
+      // Remover evento da aba, o FullCalendar não precisa ser mais renderizado.
+      object.tab.removeShownListener(shownCallback);
+    };
+
+    // Adicionar callback a aba.
+    this.tab.addShownListener(shownCallback);
+  }
+
+  // Aba não encontrada, desenhar o FullCalendar mesmo assim.
+  this.calendar.render();
+};
+
+/*
+ * Atualiza o layout no calendário.
+ */
+HTMLCalendar.prototype.updateLayout = function() {
+  if (this.div.offsetWidth == 0) return false;
+  try {
+    // Obter elementos do calendário.
+    let toolbarDiv = this.div.getElementsByClassName("fc-toolbar")[0];
+    let toolbarRightDiv = toolbarDiv.getElementsByClassName("fc-right")[0];
+    let calendarTitle = toolbarDiv.getElementsByTagName("h2")[0];
+    let todayButton = toolbarDiv.getElementsByClassName("fc-today-button")[0];
+
+    if (this.div.offsetWidth <= 330) calendarTitle.style.fontSize = "1.25rem";
+    else if (this.div.offsetWidth <= 620) calendarTitle.style.fontSize = "1.5rem";
+    else calendarTitle.style.fontSize = null;
+
+    if (this.div.offsetWidth <= 300) calendarTitle.style.padding = "0.5rem";
+    else calendarTitle.style.padding = null;
+
+    if (this.div.offsetWidth <= 576) todayButton.style.display = "none";
+    else todayButton.style.display = null;
+
+    if (this.div.offsetWidth <= 520) toolbarRightDiv.style.display = "none";
+    else toolbarRightDiv.style.display = null;
+  } catch (e) { }
+};
+
+/*
+ * Atualiza os dados no calendário.
+ */
+HTMLCalendar.prototype.updateData = function() {
+  let object = this;
+  let params = "";
+  let firstDay = "";
+  let lastDay = "";
+
+  // Valida se tem integração com Google Calendar e solicita a conexão.
+  if (this.hasGoogleCalendar && !this.logedOnGoogle) {
+    return object.addGoogleServices(this.idCliente, this.chaveApi);
+  }
+
+  // Valida se tem integração com Google Calendar e solicita a conexão.
+  if (this.hasGoogleCalendar && this.logedOnGoogle) {
+    return object.updateDataGoogle();
+  }
+
+  // Exibir preloader.
+  this.showPreloader();
+
+  // Obtem primeiro dia do mês corrente e último dia do mês corrente
+  let y = this.calendar.view.currentStart.getFullYear();
+  let m = this.calendar.view.currentStart.getMonth();
+
+  // Verifica se está com o visualização do mês setada, caso esteja apresentará todos os eventos da visualização.
+  if (this.calendar.view.type == "dayGridMonth") {
+    firstDay = this.calendar.view.activeStart.toISOString();
+    lastDay = this.calendar.view.activeEnd.toISOString();
+  } else {
+    firstDay = new Date(y, m, 1, 0, 0, 0).toISOString();
+    lastDay = (this.calendar.view.type == "timeGridWeek") ?
+      new Date(y, m + 2, 1, 0, 0, 0).toISOString() :
+      new Date(y, m + 1, 1, 0, 0, 0).toISOString();
+  }
+
+  if (d.t && d.t.dependences) {
+    let components = d.t.dependences[this.code];
+    if (components && components.length > 0) {
+      for (let code in components) {
+        if (isNumeric(code)) {
+          let component = eval("$mainform().d.c_" + components[code]);
+          if (component) {
+            params += ("&WFRInput" + component.getCode() + "=" + URLEncode(component.getValue(), "GET"));
+          }
+        }
+      }
+    }
+  }
+
+  // Mandar pedido para o servidor para obter os dados do calendário no ano e mês atual.
+  const xhr = new XMLHttpRequest();
+
+  xhr.open(
+    "GET",
+    getAbsolutContextPath() + "componentData.do?action=componentData&sys=" + URLEncode(this.sys, "GET") +
+      "&formID=" + URLEncode(this.formID, "GET") +
+      "&comID=" + URLEncode(this.code, "GET") +
+      "&start=" + URLEncode(firstDay, "GET") +
+      "&end=" + URLEncode(lastDay, "GET") + params,
+    true
+  );
+
+  xhr.addEventListener("load", function() {
+    if (xhr.readyState === 4) {
+      try {
+        let response = JSON.parse(xhr.responseText);
+
+        // Utilizar função batchRendering para evitar que o calendário
+        // seja renderizado novamente a cada operação de inserção.
+        object.calendar.batchRendering(function() {
+          // Limpar eventos na memória.
+          object.clearEvents();
+
+          // Verificar se possui eventos na resposta.
+          if (response && response.events) {
+            for (let i = 0; i < response.events.length; i++) {
+              let event = response.events[i];
+
+              object.addEvent(
+                event.title,
+                event.start,
+                event.end,
+                event.id,
+                false,
+                event.eventColor,
+                event.textColor
+              );
+            }
+          }
+
+          // Verificar se possui feriados na resposta.
+          if (response && response.holidays) {
+            for (let i = 0; i < response.holidays.length; i++) {
+              let holiday = response.holidays[i];
+              let holidayDate = moment(holiday.date);
+
+              // Adicionar evento ao calendário.
+              object.calendar.addEvent({
+                title: holiday.title,
+                start: holidayDate.toISOString(),
+                end: holidayDate.toISOString(),
+                allDay: true,
+                overlap: false,
+                rendering: "background",
+                color: "#ff9f89"
+              });
+            }
+          }
+        });
+
+        // Verificar se o evento "Ao Atualizar" foi associado.
+        if (object.AoAtualizar !== undefined && object.AoAtualizar !== null) {
+          // Chamar evento "Ao Atualizar".
+          object.AoAtualizar.call(object);
+        }
+
+        // Esconder preloader.
+        object.hidePreloader();
+      } catch (e) {
+        // Esconder preloader.
+        object.hidePreloader();
+
+        throw e;
+      }
+    }
+  });
+
+  xhr.addEventListener("error", function() {
+    // Esconder preloader.
+    object.hidePreloader();
+  });
+
+  xhr.send(null);
+};
+
+/**
+ * Obtém um valor lógico indicando se esse calendário possui um formulário de edição.
+ **/
+HTMLCalendar.prototype.hasEditForm = function() {
+  return this.FormularioDeEdicao !== undefined && this.FormularioDeEdicao !== null && this.FormularioDeEdicao.length > 0;
+};
+
+/**
+ * Obtém um valor lógico indicando se o calendário pode deletar eventos.
+ **/
+HTMLCalendar.prototype.canDelete = function() {
+  return (this.canEdit() && !this.hasEditForm() || this.hasGoogleCalendar);
+};
+
+/**
+ * Obtém um valor lógico indicando se o calendário pode adicionar eventos.
+ **/
+HTMLCalendar.prototype.isEditViable = function() {
+  return (!this.hasMoreTables && !this.hasEditForm()) ||
+         (this.hasMoreTables && this.hasEditForm()) ||
+         (!this.hasMoreTables && this.hasEditForm());
+};
+
+/**
+ * Obtém um valor lógico indicando se o calendário pode adicionar eventos.
+ **/
+HTMLCalendar.prototype.canAdd = function() {
+  return (this.editable && this.enabled && !this.readonly) && (
+    (!this.hasMoreTables && !this.hasEditForm()) ||
+    (this.hasMoreTables && this.hasEditForm()) ||
+    (!this.hasMoreTables && this.hasEditForm())
+  );
+};
+
+/**
+ * Obtém um valor lógico indicando se o calendário pode editar eventos.
+ **/
+HTMLCalendar.prototype.canEdit = function() {
+  return this.hasEventsIds && (this.editable && this.enabled && !this.readonly) && (
+    (!this.hasMoreTables && !this.hasEditForm()) ||
+    (this.hasMoreTables && this.hasEditForm()) ||
+    (!this.hasMoreTables && this.hasEditForm())
+  ) ||  this.hasGoogleCalendar;
+};
+
+/**
+ * Obtém um valor lógico indicando se o calendário pode editar eventos através do modal de edição.
+ **/
+HTMLCalendar.prototype.canEditViaModal = function() {
+  return (this.canEdit() && !this.hasMoreTables && !this.hasEditForm()) || this.hasGoogleCalendar;
+};
+
+/**
+ * Obtém um valor lógico indicando se o calendário pode editar eventos através da funcionalidade de arrastar e soltar.
+ **/
+HTMLCalendar.prototype.canEditDragging = function() {
+  return this.canEditViaModal() || (this.AoMoverEvento !== undefined && this.AoMoverEvento !== null);
+};
+
+/**
+ * Obtém um valor lógico indicando se o calendário pode editar eventos através da funcionalidade de redimensionar.
+ **/
+HTMLCalendar.prototype.canEditResizing = function() {
+  return this.canEditViaModal() || (this.AoRedimensionarEvento !== undefined && this.AoRedimensionarEvento !== null);
+};
+
+/**
+ * Obtém um valor lógico indicando se o calendário possui alguma ação nos eventos.
+ **/
+HTMLCalendar.prototype.hasActionInEvents = function() {
+  return this.editable || (this.AoClicarNoEvento !== undefined && this.AoClicarNoEvento !== null);
+};
+
+/**
+ * Limpa todos os eventos na memória do calendário.
+ **/
+HTMLCalendar.prototype.clearEvents = function() {
+  let events = this.calendar.getEvents();
+  if (events && events.length > 0) {
+    for (let i = 0; i < events.length; i++) {
+      events[i].remove();
+    }
+  }
+};
+
+/**
+ * Executa o evento onclick do componente.
+ **/
+HTMLCalendar.prototype.click = function() {
+  if (this.div.onclick) this.div.onclick.call(this);
+};
+
+/**
+ * Ocorre quando o utilizador clica na div.
+ **/
+HTMLCalendar.prototype.clickAction = function(e) {
+  // Fechar menu dropdown.
+  this.closeDropdownMenu();
+};
+
+/**
+ * Ocorre quando o utilizador seleciona uma data.
+ * @param e Objeto contendo as informações da data relacionada ao evento.
+ **/
+HTMLCalendar.prototype.selectDateAction = function(e) {
+  let dateMoment = moment(e.start);
+  let dateStr = dateMoment.format(this.utcDateFormat);
+  let timeStr = dateMoment.format(this.utcTimeFormat);
+
+  this.hoveredDate = dateStr;
+  this.selectedDate = dateStr;
+
+  this.hoveredTime = timeStr;
+  this.selectedTime = timeStr;
+
+  this.selectedDateTime = e.start;
+
+  // Fechar menu dropdown.
+  this.closeDropdownMenu();
+};
+
+/**
+ * Ocorre quando o utilizador clica com o botão direito no calendário.
+ **/
+HTMLCalendar.prototype.contextMenuAction = function(e) {
+  // Verificar se o calendário possui menu de contexto.
+  if (this.hasDropdownMenu) {
+    // Não abrir o menu de contexto do navegador.
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  if (this.calendar) {
+    // Selecionar a data da célula que o mouse está em cima.
+    let targetDateTime = "";
+
+    if (this.hoveredDate !== null) {
+      targetDateTime += this.hoveredDate;
+      this.selectedDate = this.hoveredDate;
+    } else if (this.selectedDate !== null) {
+      targetDateTime += this.selectedDate;
+    }
+
+    if (this.hoveredTime !== null) {
+      targetDateTime += "T" + this.hoveredTime;
+      this.selectedTime = this.hoveredTime;
+    } else if (this.selectedTime !== null) {
+      targetDateTime += "T" + this.selectedTime;
+    }
+
+    // Selecionar a data com foco.
+    this.calendar.select(targetDateTime, targetDateTime);
+
+    // Exibir menu dropdown específico ao item com foco.
+    if (this.hoveredEvent == null) {
+      // Definir evento selecionado como nulo.
+      this.selectedEvent = null;
+
+      this.openDropdownMenu(0, e.pageX, e.pageY);
+    } else {
+      // Definir evento selecionado.
+      this.selectedEvent = this.hoveredEvent;
+
+      // Exibir menu dropdown dos eventos
+      this.openDropdownMenu(1, e.pageX, e.pageY);
+    }
+  }
+};
+
+/**
+ * Abre o menu dropdown.
+ * @param type Tipo do menu dropdown.
+ * @param x Posição X para abrir o menu dropdown.
+ * @param y Posição Y para abrir o menu dropdown.
+ **/
+HTMLCalendar.prototype.openDropdownMenu = function(type, x, y) {
+  // Verificar se o calendário possui menu de contexto ativado.
+  if (!this.hasDropdownMenu) return false;
+
+  // Verificar se o calendário possui o evento "Ao Abrir Menu de Contexto".
+  if (this.AoAbrirMenuDeContexto !== undefined && this.AoAbrirMenuDeContexto !== null) {
+    return this.AoAbrirMenuDeContexto.call(this, this.selectedEvent ? this.selectedEvent.id : null, x, y);
+  }
+
+  if (this.editable && type == 1) {
+    if (this.eventDropdownMenu) {
+      this.eventDropdownMenu.style.top = y + "px";
+      this.eventDropdownMenu.style.left = x + "px";
+      this.eventDropdownMenu.style.zIndex = 100001;
+      this.eventDropdownMenu.className = this.eventDropdownMenuClass + " show";
+
+      // Atualizar o span de data do evento.
+      this.eventDropdownTimeSpan.innerHTML = this.selectedEvent ?
+        moment(this.selectedEvent.start).format("L") : "(...)";
+
+      // Verificar por estados do calendário e atualizar os itens.
+      if (this.dropdownEditEvent) this.dropdownEditEvent.className =
+        (!this.canEdit() || this.hoveredEvent == null) ?
+        "dropdown-item disabled" : "dropdown-item"; // Bootstrap
+      if (this.dropdownDeleteEvent) this.dropdownDeleteEvent.className =
+        (!this.canDelete() || this.hoveredEvent == null) ?
+        "dropdown-item disabled" : "dropdown-item"; // Bootstrap
+    }
+  } else {
+    if (this.dropdownMenu) {
+      this.dropdownMenu.style.top = y + "px";
+      this.dropdownMenu.style.left = x + "px";
+      this.dropdownMenu.style.zIndex = 100001;
+      this.dropdownMenu.className = this.dropdownMenuClass + " show";
+
+      // Verificar por estados do calendário e atualizar os itens.
+      if (this.dropdownViewEvents) this.dropdownViewEvents.className =
+        this.isTimeline() ? "dropdown-item disabled" : "dropdown-item"; // Bootstrap
+      if (this.dropdownAddEvent) this.dropdownAddEvent.className =
+        !this.canAdd() ? "dropdown-item disabled" : "dropdown-item"; // Bootstrap
+    }
+  }
+};
+
+/**
+ * Fecha o menu dropdown.
+ **/
+HTMLCalendar.prototype.closeDropdownMenu = function() {
+  if (!this.hasDropdownMenu) return false;
+
+  // Verificar se o calendário possui o evento "Ao Fechar Menu de Contexto".
+  if (this.AoFecharMenuDeContexto !== undefined && this.AoFecharMenuDeContexto !== null) {
+    return this.AoFecharMenuDeContexto.call(this);
+  }
+
+  if (this.dropdownMenu) {
+    this.dropdownMenu.style = "";
+    this.dropdownMenu.className = this.dropdownMenuClass;
+  }
+
+  if (this.eventDropdownMenu) {
+    this.eventDropdownMenu.style = "";
+    this.eventDropdownMenu.className = this.eventDropdownMenuClass;
+  }
+};
+
+/**
+ * Exibe o preloader do calendário.
+ **/
+HTMLCalendar.prototype.showPreloader = function() {
+  if (this.preloaderDiv) this.preloaderDiv.className = this.preloaderDivClass;
+};
+
+/**
+ * Oculta o preloader do calendário.
+ **/
+HTMLCalendar.prototype.hidePreloader = function() {
+  if (this.preloaderDiv) this.preloaderDiv.className = "d-none";
+};
+
+/**
+ * Retorna um boolean indicando se a view atual é a de linha do tempo.
+ **/
+HTMLCalendar.prototype.isTimeline = function() {
+  return this.calendar && this.calendar.view && this.calendar.view.type == "timeGridDay";
+};
+
+/**
+ * Abrir a view linha do tempo.
+ * @param date A data para abrir a linha do tempo. Se for nula, irá utilizar a data selecionada.
+ **/
+HTMLCalendar.prototype.openTimeline = function(date) {
+  if (this.calendar) this.calendar.changeView("timeGridDay", date ? date : this.selectedDate);
+  this.closeDropdownMenu();
+};
+
+/*
+ * Ocorre quando algum componente que é dependência desse muda de valor
+ */
+HTMLCalendar.prototype.refresh = function() {
+  this.updateCalendarAction();
+};
+
+/**
+ * Ocorre ao clicar no item de atualizar calendário.
+ **/
+HTMLCalendar.prototype.updateCalendarAction = function() {
+  this.updateData();
+  this.closeDropdownMenu();
+};
+
+/**
+ * Ocorre ao clicar no item de ver compromissos.
+ **/
+HTMLCalendar.prototype.viewEventsAction = function() {
+  this.openTimeline();
+};
+
+/**
+ * Verificar a resposta do servidor.
+ * @param response Resposta do servidor.
+ **/
+HTMLCalendar.prototype.checkServerResponse = function(response) {
+  try {
+    if (response && response.length > 0) {
+      // Dar parse no JSON retornado pelo servidor.
+      response = JSON.parse(response);
+
+      // Verificar se a operação falhou.
+      if (response.success === "0") {
+        // Exibir uma mensagem de erro.
+        interactionError(safeGetLocaleMessage("ERROR.OPERATION_ERROR"), null, null, null, response.details ? response.details : null);
+        return false;
+      }
+    }
+  } catch (e) { }
+  return true;
+};
+
+/**
+ * Adiciona um evento ao calendário.
+ * @param title Título/Descrição do evento.
+ * @param start Data inicial do evento.
+ * @param end Data final do evento.
+ * @param save Sallet no banco de dados.
+ **/
+HTMLCalendar.prototype.addEvent = function(title, start, end, id, save, color, textColor) {
+  let object = this;
+  let eventStart = moment(start);
+  let eventEnd = end ? moment(end) : null;
+  let allDay = (end === undefined || end === null ||
+    (eventStart.hour() == 0 && eventStart.minute() == 0 && eventStart.second() == 0 &&
+     eventEnd.hour() == 0 && eventEnd.minute() == 0 && eventEnd.second() == 0));
+
+  // Adicionar evento ao calendário.
+  this.calendar.addEvent({
+    id: id,
+    title: title,
+    start: eventStart.toISOString(),
+    end: eventEnd ? eventEnd.toISOString() : eventStart.toISOString(),
+    allDay: allDay,
+    backgroundColor : color,
+    textColor: textColor
+  });
+
+  if (save && this.editable) {
+    // Exibir preloader.
+    this.showPreloader();
+
+    // Enviar pedido para o servidor para adicionar o evento.
+    this.sendRequest("a", null, {
+      title: title,
+      start: eventStart.toDate().format(this.requestDateTimeFormat),
+      end: (eventEnd === undefined || eventEnd === null) ?
+        eventStart.toDate().format(this.requestDateTimeFormat) :
+        eventEnd.toDate().format(this.requestDateTimeFormat),
+      allDay: allDay
+    }, function(response) {
+      // Verificar a resposta do servidor.
+      object.checkServerResponse(response);
+
+      // Atualizar dados do calendário.
+      object.updateData();
+    }, function() {
+      // Esconder preloader.
+      object.hidePreloader();
+    });
+  }
+};
+
+/**
+ * Edita um evento do calendário.
+ * @param event Instância do evento.
+ * @param title Título/Descrição do evento.
+ * @param start Data inicial do evento.
+ * @param end Data final do evento.
+ **/
+HTMLCalendar.prototype.editEvent = function(event, title, start, end, save) {
+  let object = this;
+
+  let eventStart = moment(start);
+  let eventEnd = end ? moment(end) : null;
+  let allDay = (end === undefined || end === null ||
+    (eventStart.hour() == 0 && eventStart.minute() == 0 && eventStart.second() == 0 &&
+     eventEnd.hour() == 0 && eventEnd.minute() == 0 && eventEnd.second() == 0));
+
+  if (save != 2 && !this.hasGoogleCalendar) {
+    event.setStart(start);
+    event.setEnd(end);
+    event.setAllDay(allDay);
+    event.setProp("title", title);
+  }
+
+  if (save >= 1 && this.editable) {
+    // Exibir preloader.
+    this.showPreloader();
+
+    // Enviar pedido ao servidor para editar o evento no banco de dados.
+    this.sendRequest("e", null, {
+      id: event.id,
+      title: title,
+      event: event,
+      start: eventStart.toDate().format(this.requestDateTimeFormat),
+      end: (eventEnd === undefined || eventEnd === null) ?
+        eventStart.toDate().format(this.requestDateTimeFormat) :
+        eventEnd.toDate().format(this.requestDateTimeFormat),
+      allDay: allDay
+    }, function(response) {
+      // Verificar a resposta do servidor.
+      object.checkServerResponse(response);
+
+      // Atualizar dados do calendário.
+      object.updateData();
+    }, function() {
+      // Esconder preloader.
+      object.hidePreloader();
+    });
+  }
+};
+
+/**
+ * Deleta um evento do calendário.
+ * @param event Instância do evento.
+ **/
+HTMLCalendar.prototype.removeEvent = function(event) {
+  let object = this;
+
+  if (this.editable) {
+    // Enviar pedido ao servidor para remover o evento do banco de dados.
+    this.sendRequest("d", null, {
+      id: event.id,
+      title: event.title
+    }, function(response) {
+      // Verificar a resposta do servidor.
+      object.checkServerResponse(response);
+
+      // Atualizar dados do calendário.
+      object.updateData();
+    }, function() {
+      // Esconder preloader.
+      object.hidePreloader();
+    });
+  } else {
+    // Remover evento.
+    event.remove();
+  }
+};
+
+/**
+ * Ocorre ao clicar no item de adicionar evento.
+ **/
+HTMLCalendar.prototype.addEventAction = function() {
+  // Fechar menu dropdown.
+  this.closeDropdownMenu();
+  if (!this.editable) return;
+
+  // Criar o modal de adicionar evento.
+  this.createEventModal(0, this.selectedDateTime, this.isTimeline() ? this.selectedDateTime : null);
+};
+
+/**
+ * Ocorre ao clicar no item de editar evento.
+ **/
+HTMLCalendar.prototype.editEventAction = function() {
+  // Fechar menu dropdown.
+  this.closeDropdownMenu();
+  if (!this.editable  && !this.hasGoogleCalendar) return false;
+
+  // Criar o modal de editar evento.
+  this.createEventModal(1, this.lastHoveredEvent.start, this.lastHoveredEvent.end, this.lastHoveredEvent.allDay, this.lastHoveredEvent);
+};
+
+/**
+ * Cria um modal para adicionar/editar eventos.
+ **/
+HTMLCalendar.prototype.createEventModal = function(type, startDate, endDate, allDay, event) {
+  let object = this;
+
+  // Verificar se o calendário possui formulário de edição e não possui integração com Google Calendar.
+  if (this.hasEditForm() && !this.hasGoogleCalendar) {
+    let url = getAbsolutContextPath() +
+      "componentData.do?action=componentData&sys=" + URLEncode(this.sys, "GET") +
+      "&formID=" + URLEncode(this.formID, "GET") +
+      "&comID=" + URLEncode(this.code, "GET");
+
+    if (type == 0) url+= "&type=a"// Adicionar Evento
+    else if (type == 1) url+= "&req=" + URLEncode(event.id, "GET") + "&type=e"// Editar evento
+
+    getAndEvalSync2(url);
+  } else if (this.canEditViaModal() || this.hasGoogleCalendar) {
+    // Criar o modal de adicionar evento.
+    let modal = ebfBootstrapCreateModal(
+      !this.editable ? getLocaleMessage("LABEL.CALENDAR_EVENT") :
+      type == 0 ? getLocaleMessage("LABEL.CALENDAR_ADD_EVENT") :
+      getLocaleMessage("LABEL.CALENDAR_EDIT_EVENT"),
+      true, null, null, null, document.body);
+
+    // Obter elementos do modal.
+    let modalDiv = modal[0];
+    let modalBody = modal[2];
+    let modalFooter = modal[3];
+
+    let addButton = null;
+
+    // Criar row de data do evento.
+    let dateRow = document.createElement("div");
+    dateRow.className = "row"; // Bootstrap
+    modalBody.appendChild(dateRow);
+
+    let dateRowCol1 = document.createElement("div");
+    dateRowCol1.className = "col-6"; // Bootstrap
+    dateRow.appendChild(dateRowCol1);
+
+    let dateRowCol2 = document.createElement("div");
+    dateRowCol2.className = "col-6"; // Bootstrap
+    dateRow.appendChild(dateRowCol2);
+
+    // Criar input da data inicial.
+    let dateStartLabel = document.createElement("label");
+    dateStartLabel.className = "mb-2"; // Bootstrap
+    dateStartLabel.setAttribute("for", modalDiv.id + "-date-start");
+    dateStartLabel.innerHTML = getLocaleMessage("LABEL.CALENDAR_DATE_START");
+    dateRowCol1.appendChild(dateStartLabel);
+
+    let dateStartInput = document.createElement("input");
+    dateStartInput.type = "text";
+    dateStartInput.className = "form-control"; // Bootstrap
+    dateStartInput.id = modalDiv.id + "-date-start";
+    dateStartInput.setAttribute("placeholder", getLocaleMessage("LABEL.CALENDAR_DATE_START"));
+    dateStartInput.readOnly = !this.editable;
+    dateRowCol1.appendChild(dateStartInput);
+
+    // Criar checkbox da data final.
+    let dateEndCheckboxDiv = document.createElement("div");
+    dateEndCheckboxDiv.className = "form-check mb-2"; // Bootstrap
+    dateRowCol2.appendChild(dateEndCheckboxDiv);
+
+    let dateEndCheckboxInput = document.createElement("input");
+    dateEndCheckboxInput.type = "checkbox";
+    dateEndCheckboxInput.className = "form-check-input"; // Bootstrap
+    dateEndCheckboxInput.id = modalDiv.id + "-date-end-checkbox";
+    dateEndCheckboxInput.checked = (startDate != endDate && (endDate != null || allDay === false));
+    dateEndCheckboxInput.disabled = !this.editable;
+    dateEndCheckboxDiv.appendChild(dateEndCheckboxInput);
+
+    let dateEndLabel = document.createElement("label");
+    dateEndLabel.className = "form-check-label"; // Bootstrap
+    dateEndLabel.setAttribute("for", modalDiv.id + "-date-end-checkbox");
+    dateEndLabel.innerHTML = getLocaleMessage("LABEL.CALENDAR_DATE_END");
+    dateEndLabel.style.overflow = "visible";
+    dateEndCheckboxDiv.appendChild(dateEndLabel);
+
+    // Criar input da data final.
+    let dateEndInput = document.createElement("input");
+    dateEndInput.type = "text";
+    dateEndInput.className = "form-control"; // Bootstrap
+    dateEndInput.id = modalDiv.id + "-date-end";
+    dateEndInput.setAttribute("placeholder", getLocaleMessage("LABEL.CALENDAR_DATE_END"));
+    dateEndInput.readOnly = !this.editable || !dateEndCheckboxInput.checked;
+    dateRowCol2.appendChild(dateEndInput);
+
+    if (this.editable) {
+      // Inicializar o datetimepicker
+      let datetimepickerprops = {
+        // Definir a data inicial
+        date: moment(startDate),
+
+        // Idioma do datetimepicker
+        locale: this.locale,
+
+        // Formato da data
+        format: this.dateTimeFormat,
+
+        // Não exibir o datetimepicker quando o input for somente leitura
+        ignoreReadonly: false,
+
+        // Exibir o botão para definir a data para o dia atual
+        showTodayButton: true,
+
+        // Exibir o datetimepicker quando o input receber foco
+        allowInputToggle: true,
+
+        // Ajeitar ícone de tempo
+        icons: {
+          time: "fas fa-clock", // Font Awesome
+        },
+      };
+
+      $(dateStartInput).datetimepicker(datetimepickerprops);
+
+      if (endDate != null) datetimepickerprops.date = moment(endDate);
+      $(dateEndInput).datetimepicker(datetimepickerprops);
+    } else {
+      dateStartInput.value = moment(startDate).format(dateTimeFormat);
+      dateEndInput.value = endDate == null ? dateStartInput.value : moment(endDate).format(dateTimeFormat);
+    }
+
+    // Adicionando inputs especificos da inetegração Google Calendar
+    if (this.hasGoogleCalendar){
+      // Criar input de título do evento.
+      var titleFormGroup = document.createElement("div");
+      titleFormGroup.className = "mt-3"; // Bootstrap
+      modalBody.appendChild(titleFormGroup);
+
+      var titleLabel = document.createElement("label");
+      titleLabel.className = "mb-2"; // Bootstrap
+      titleLabel.setAttribute("for", modalDiv.id + "-tatle");
+      titleLabel.innerHTML = getLocaleMessage("LABEL.TITLE") + ":";
+      titleFormGroup.appendChild(titleLabel);
+
+      var titleInput = document.createElement("input");
+      titleInput.type = "text";
+      titleInput.className = "form-control"; // Bootstrap
+      titleInput.id = modalDiv.id + "-title";
+      if (event && event.title) titleInput.value = event.title;
+      titleInput.setAttribute("placeholder", getLocaleMessage("LABEL.TITLE"));
+      titleInput.readOnly = !this.editable;
+      titleFormGroup.appendChild(titleInput);
+    }
+
+    // Criar input de descrição do evento.
+    let descriptionFormGroup = document.createElement("div");
+    descriptionFormGroup.className = "mt-3"; // Bootstrap
+    modalBody.appendChild(descriptionFormGroup);
+
+    let descriptionLabel = document.createElement("label");
+    descriptionLabel.className = "mb-2"; // Bootstrap
+    descriptionLabel.setAttribute("for", modalDiv.id + "-description");
+    descriptionLabel.innerHTML = getLocaleMessage("LABEL.DESCRIPTION") + ":";
+    descriptionFormGroup.appendChild(descriptionLabel);
+
+    let descriptionInput = document.createElement("input");
+    descriptionInput.type = "text";
+    descriptionInput.className = "form-control"; // Bootstrap
+    descriptionInput.id = modalDiv.id + "-description";
+    if (event && event.title) descriptionInput.value = event.title;
+    if (this.hasGoogleCalendar && event && event._def.extendedProps.description) descriptionInput.value = event._def.extendedProps.description;
+    descriptionInput.setAttribute("placeholder", getLocaleMessage("LABEL.DESCRIPTION"));
+    descriptionInput.readOnly = !this.editable;
+    descriptionFormGroup.appendChild(descriptionInput);
+
+    // Adicionando inputs especificos da inetegração Google Calendar
+    if (this.hasGoogleCalendar){
+      // Criar input de participantes do evento.
+      var attendeesFormGroup = document.createElement("div");
+      attendeesFormGroup.className = "mt-3"; // Bootstrap
+      modalBody.appendChild(attendeesFormGroup);
+
+      var attendeesLabel = document.createElement("label");
+      attendeesLabel.className = "mb-2"; // Bootstrap
+      attendeesLabel.setAttribute("for", modalDiv.id + "-tatle");
+      attendeesLabel.innerHTML = getLocaleMessage("LABEL.ATTENDEES") + ":";
+      attendeesFormGroup.appendChild(attendeesLabel);
+
+      var attendeesInput = document.createElement("input");
+      attendeesInput.type = "text";
+      attendeesInput.className = "form-control"; // Bootstrap
+      attendeesInput.id = modalDiv.id + "-attendees";
+      // Se exitir participantes no evento exibe de forma correta
+      if (event && event._def.extendedProps.attendees){
+        let attendees;
+        for (let i = 0; i < event._def.extendedProps.attendees.length; ++i){
+          if(event._def.extendedProps.attendees.length != i && attendees == undefined){
+            attendees = event._def.extendedProps.attendees[i].email + ", ";
+          } else {
+            attendees = attendees + event._def.extendedProps.attendees[i].email + ", ";
+          }
+        }
+        attendees = attendees.slice(0, attendees.length - 2);
+        attendeesInput.value = attendees;
+      } 
+      attendeesInput.setAttribute("placeholder", getLocaleMessage("INFO.ATTENDEES"));
+      attendeesInput.readOnly = !this.editable;
+      attendeesFormGroup.appendChild(attendeesInput);
+    
+      // Criar input de localização do evento.
+      var locationFormGroup = document.createElement("div");
+      locationFormGroup.className = "mt-3"; // Bootstrap
+      modalBody.appendChild(locationFormGroup);
+
+      var locationLabel = document.createElement("label");
+      locationLabel.className = "mb-2"; // Bootstrap
+      locationLabel.setAttribute("for", modalDiv.id + "-location");
+      locationLabel.innerHTML = getLocaleMessage("LABEL.LOCATION") + ":";
+      locationFormGroup.appendChild(locationLabel);
+
+      var locationInput = document.createElement("input");
+      locationInput.type = "text";
+      locationInput.className = "form-control"; // Bootstrap
+      locationInput.id = modalDiv.id + "-location";
+      if (event && event._def.extendedProps.location) locationInput.value = event._def.extendedProps.location;
+      locationInput.setAttribute("placeholder", getLocaleMessage("LABEL.LOCATION"));
+      locationInput.readOnly = !this.editable;
+      locationFormGroup.appendChild(locationInput);
+    }
+
+    if(this.hasGoogleCalendar  &&  type == 0){
+      // Criar row de frequência do evento.
+      var spaceBr = document.createElement("br");
+      modalBody.appendChild(spaceBr);
+      var recurrenceRow = document.createElement("div");
+      recurrenceRow.className = "row"; // Bootstrap
+      modalBody.appendChild(recurrenceRow);
+
+      var recurrenceRowCol1 = document.createElement("div");
+      recurrenceRowCol1.className = "col-6"; // Bootstrap
+      recurrenceRow.appendChild(recurrenceRowCol1);
+
+      var recurrenceRowCol2 = document.createElement("div");
+      recurrenceRowCol2.className = "col-6"; // Bootstrap
+      recurrenceRow.appendChild(recurrenceRowCol2);
+
+      // Criar input de recorrência do evento.
+      var recurrenceLabel = document.createElement("label");
+      recurrenceLabel.className = "mb-2"; // Bootstrap
+      recurrenceLabel.setAttribute("for", modalDiv.id + "-tatle");
+      recurrenceLabel.innerHTML = getLocaleMessage("LABEL.RECURRENCE") + ":";
+      recurrenceRowCol1.appendChild(recurrenceLabel);
+
+      var recurrenceInput = document.createElement("select");
+      recurrenceInput.className = "form-control"; // Bootstrap
+
+      var options_value = ["DAILY", "WEEKLY", "MONTHLY","YEARLY"];
+      var options_text = [
+        getLocaleMessage("LABEL.DAILY"),getLocaleMessage("LABEL.WEEKLY"),
+        getLocaleMessage("LABEL.MONTHLY"),getLocaleMessage("LABEL.YEARLY")
+      ];
+      for (var i = 0; i < options_value.length; i++) {
+        var option = document.createElement("option");
+        option.value = options_value[i];
+        option.text = options_text[i];
+        recurrenceInput.appendChild(option);
+      }
+      recurrenceInput.id = modalDiv.id + "-recurrence";
+      if (event && event.freq) option.value = event.freq;
+      recurrenceInput.readOnly = !this.editable;
+      recurrenceRowCol1.appendChild(recurrenceInput);
+
+      // Criar input de repetições do evento.
+      var countLabel = document.createElement("label");
+      countLabel.className = "mb-2"; // Bootstrap
+      countLabel.setAttribute("for", modalDiv.id + "-count");
+      countLabel.innerHTML = getLocaleMessage("LABEL.COUNT") + ":";
+      recurrenceRowCol2.appendChild(countLabel);
+
+      var countInput = document.createElement("input");
+      countInput.type = "number";
+      countInput.className = "form-control"; // Bootstrap
+      countInput.id = modalDiv.id + "-count";
+      countInput.min = 1;
+      countInput.value = 1;
+      countInput.setAttribute("placeholder", getLocaleMessage("LABEL.COUNT"));
+      countInput.readOnly = !this.editable;
+      recurrenceRowCol2.appendChild(countInput);      
+    }
+
+    // Criar botões do modal.
+    let cancelButton = document.createElement("button");
+    cancelButton.type = "button";
+    cancelButton.className = "btn btn-secondary float-right"; // Bootstrap
+    cancelButton.innerHTML = this.editable ? getLocaleMessage("LABEL.CANCEL") : getLocaleMessage("LABEL.CLOSE");
+    cancelButton.setAttribute("data-bs-dismiss", "modal"); // Bootstrap
+    modalFooter.appendChild(cancelButton);
+
+    if (this.editable) {
+      if (type == 1) {
+        let removeButton = document.createElement("button");
+        removeButton.type = "button";
+        removeButton.className = "btn btn-danger float-right"; // Bootstrap
+        removeButton.innerHTML = getLocaleMessage("LABEL.DELETE");
+        modalFooter.appendChild(removeButton);
+
+        // Associar evento de clique ao botão.
+        removeButton.onclick = function() {
+          object.removeEvent(event);
+          cancelButton.click();
+        };
+      }
+
+      addButton = document.createElement("button");
+      addButton.type = "button";
+      addButton.className = "btn btn-primary float-right me-2"; // Bootstrap
+      if (!event || event.title.length == 0) addButton.setAttribute("disabled", "disabled");
+      addButton.innerHTML = type == 0 ? getLocaleMessage("LABEL.ADD") : getLocaleMessage("LABEL.EDIT");
+      modalFooter.appendChild(addButton);
+
+      // Associar evento de clique ao botão.
+      addButton.onclick = function() {
+
+        // Verifica se é Google Calendar
+        if(object.hasGoogleCalendar){
+          if(attendeesInput.value){
+            let attendees = attendeesInput.value.split(",");
+            var attendees_array = [];
+            for(let i = 0; i < attendees.length; i++){
+              attendees_array[i] = {'email': attendees[i].trim()};
+            }
+          }
+
+          let g_event = {
+            summary: titleInput.value,
+            location: locationInput.value,
+            description: descriptionInput.value,
+              start: {
+                dateTime: $(dateStartInput).datetimepicker("viewDate").toISOString(),
+                timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+            },
+            end: {
+              dateTime: dateEndCheckboxInput.checked ? $(dateEndInput).datetimepicker("viewDate").toISOString() : $(dateStartInput).datetimepicker("viewDate").toISOString(),
+              timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+            },
+            attendees: attendees_array,
+            recurrence:{ 
+              freq: recurrenceInput ? recurrenceInput.value : "Daily",
+              count: countInput ? countInput.value : 1
+            }
+          }
+          if(type == 0){ // Adiciona evento no Google Calendar
+            object.addEventGoogle(g_event);
+          } else { // Edita evento no Google Calendar
+            g_event.id = event.id;
+            object.editEvent(g_event, descriptionInput.value,
+              $(dateStartInput).datetimepicker("viewDate").format(object.utcDateFormat + " " + object.utcTimeFormat),
+              $(dateEndInput).datetimepicker("viewDate").format(object.utcDateFormat + " " + object.utcTimeFormat), 1);
+          }
+          
+        } else if (type == 0 && !object.hasGoogleCalendar) { // Adicionar evento.
+          object.addEvent(descriptionInput.value,
+            $(dateStartInput).datetimepicker("viewDate").format(object.utcDateFormat + " " + object.utcTimeFormat),
+            $(dateEndInput).datetimepicker("viewDate").format(object.utcDateFormat + " " + object.utcTimeFormat), null, true);
+        } else if (type == 1 && !object.hasGoogleCalendar) { // Editar evento.
+          object.editEvent(event, descriptionInput.value,
+            $(dateStartInput).datetimepicker("viewDate").format(object.utcDateFormat + " " + object.utcTimeFormat),
+            $(dateEndInput).datetimepicker("viewDate").format(object.utcDateFormat + " " + object.utcTimeFormat), 1);
+        }
+
+        // Fechar o modal.
+        ebfBootstrapCloseModal(modalDiv);
+      };
+
+      // Associar evento para teclas de atalho.
+      let shortcutKeysEvent = function(e) {
+        if (e.key === "Enter" || e.which === 13) addButton.click();
+        else if (e.key === "Escape" || e.which === 27) cancelButton.click();
+      };
+
+      dateStartInput.onkeydown = shortcutKeysEvent;
+      dateEndInput.onkeydown = shortcutKeysEvent;
+      descriptionInput.onkeydown = shortcutKeysEvent;
+    }
+
+    // Associar eventos aos elementos do modal.
+    dateEndCheckboxInput.onchange = function() {
+      dateEndInput.readOnly = !dateEndCheckboxInput.checked;
+      if (!dateEndCheckboxInput.checked) {
+        dateEndInput.value = dateStartInput.value;
+        $(dateEndInput).datetimepicker("date", $(dateStartInput).datetimepicker("date"));
+      }
+    };
+
+    // Caso seja Google Calendar torna o titulo abrigatório
+    if(object.hasGoogleCalendar){
+      titleInput.oninput = function() {
+        if (addButton) {
+          if (this.value == null || this.value.length == 0) {
+            let disabledAttr = addButton.getAttribute("disabled");
+            if (disabledAttr == null || disabledAttr != "disabled") {
+              addButton.setAttribute("disabled", "disabled");
+            }
+          } else {
+            let disabledAttr = addButton.getAttribute("disabled");
+            if (disabledAttr != null && disabledAttr.length > 0) {
+              addButton.removeAttribute("disabled");
+            }
+          }
+        }
+      };
+    }
+
+  // Caso não seja Google Calendar torna a descrição abrigatória
+  if(!object.hasGoogleCalendar){
+    descriptionInput.oninput = function() {
+        if (addButton) {
+          if (this.value == null || this.value.length == 0) {
+            let disabledAttr = addButton.getAttribute("disabled");
+            if (disabledAttr == null || disabledAttr != "disabled") {
+              addButton.setAttribute("disabled", "disabled");
+            }
+          } else {
+            let disabledAttr = addButton.getAttribute("disabled");
+            if (disabledAttr != null && disabledAttr.length > 0) {
+              addButton.removeAttribute("disabled");
+            }
+          }
+        }
+      };
+    }
+  }
+};
+
+/**
+ * Ocorre ao clicar no item de remover evento.
+ **/
+HTMLCalendar.prototype.removeEventAction = function() {
+  // Fechar menu dropdown.
+  this.closeDropdownMenu();
+  if (!this.editable) return false;
+
+  // Remover evento.
+  this.removeEvent(this.selectedEvent);
+  this.selectedEvent = null;
+};
+
+/**
+ * Sobrescreve o método do HTMLElementBase devido a sua estruturação.
+ * @param v Valor lógico para habilitar/desabilitar o componente.
+ */
+HTMLCalendar.prototype.setEnabled = function(v) {
+  this.callMethod(HTMLElementBase, "setEnabled", [v]);
+  this.updateCalendarEditable();
+};
+
+/**
+ * Sobrescreve o método do HTMLElementBase devido a sua estruturação.
+ * @param v Valor lógico para mostrar/ocultar o componente.
+ */
+HTMLCalendar.prototype.setVisible = function(v) {
+  this.callMethod(HTMLElementBase, "setVisible", [v]);
+  this.updateCalendarEditable();
+};
+
+/**
+ * Sobrescreve o método do HTMLElementBase devido a sua estruturação.
+ * @param v Valor lógico para ativar/desatilet o modo somente leitura
+ */
+HTMLCalendar.prototype.setReadOnly = function(v) {
+  this.callMethod(HTMLElementBase, "setReadOnly", [v]);
+  this.updateCalendarEditable();
+};
+
+/**
+ * Atualiza o estado de editável do calendário.
+ */
+HTMLCalendar.prototype.updateCalendarEditable = function() {
+  if (this.calendar) {
+    this.calendar.setOption("editable", this.editable && this.enabled && !this.readonly);
+    this.calendar.setOption("eventStartEditable", this.editable && this.enabled && !this.readonly);
+    this.calendar.setOption("eventDurationEditable", this.editable && this.enabled && !this.readonly);
+  }
+};
+
+/**
+ * Função responsável por retornar o Ano em que componente se encontra.
+ * @returns Ano corrente.
+ */
+HTMLCalendar.prototype.getYear = function() {
+  if (this.calendar) return this.calendar.getDate().getFullYear();
+  return null;
+};
+
+/**
+ * Função responsável por retornar o Mês em que componente se encontra.
+ * @param monthName Mês por extenso?
+ * @returns Mês corrente.
+ */
+HTMLCalendar.prototype.getMonth = function(monthName) {
+  if (this.calendar) {
+    if (parseBoolean(monthName)) return this.calendar.getDate().getMonthName();
+    return (this.calendar.getDate().getMonth()+1); //Segue o padrão de [0-11];
+  }
+
+  return null;
+};
+
+/**
+ * Função responsável por voltar o calendário para a data atual.
+ */
+HTMLCalendar.prototype.goToday = function() {
+  if (this.calendar) this.calendar.today();
+};
+
+/**
+ * Função responsável por incrementar um mês no calendário para a data atual.
+ */
+HTMLCalendar.prototype.nextMonth = function() {
+  if (this.calendar) this.calendar.next();
+};
+
+/**
+ * Função responsável por decrementar um mês no calendário para a data atual.
+ */
+HTMLCalendar.prototype.prevMonth = function() {
+  if (this.calendar) this.calendar.prev();
+};
+
+/**
+ * Essa função vai para o mês e ano informado por parâmetro.
+ * @param month mês.
+ * @param year ano.
+ */
+HTMLCalendar.prototype.goToMonth = function(month, year) {
+  if (this.calendar) {
+    let nDate = new Date();
+    nDate.setDate(1);
+    nDate.setMonth(month-1);
+    nDate.setYear(year);
+    nDate.setHours(0);
+    nDate.setMinutes(0);
+    nDate.setSeconds(0);
+    nDate.setMilliseconds(0);
+    this.calendar.gotoDate(nDate);
+  }
+};
+
+/**
+ * Função responsável por incrementar um ano no calendário para a data atual.
+ */
+HTMLCalendar.prototype.nextYear = function() {
+  if (this.calendar) this.calendar.nextYear();
+};
+
+/**
+ * Função responsável por decrementar um ano no calendário para a data atual.
+ */
+HTMLCalendar.prototype.prevYear = function() {
+  if (this.calendar) this.calendar.prevYear();
+};
+
+/**
+ * Função responsável por realizar as requisições para o servidor.
+ * @param type Tipo da requisição:
+ *   - Vazio para consultar eventos;
+ *   - "a" para adicionar um evento;
+ *   - "e" para editar um evento;
+ *   - "d" para deletar um evento;
+ * @param req ID do evento relacionado.
+ * @param params Parâmetros adicionais do pedido.
+ * @param cbSuccess Callback de sucesso.
+ * @param cbError Callback de erro.
+ */
+HTMLCalendar.prototype.sendRequest = function(type, req, params, cbSuccess, cbError) {
+
+
+  // Criar XHR para enviar a requisição.
+  let xhr = new XMLHttpRequest();
+
+  // Definir tipo e URL da conexão.
+  xhr.open("POST", "componentData.do?action=componentData&sys=" + URLEncode(this.sys, "GET") +
+    "&formID=" + URLEncode(this.formID, "GET") +
+    "&comID=" + URLEncode(this.code, "GET") +
+    "&type=" + type +
+    (req ? "&req=" + URLEncode(req, "GET") : ""), true);
+
+  // Definir Content-Type do pedido.
+  xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+
+  // Associar evento de sucesso.
+  xhr.addEventListener("load", function(e) {
+    if (xhr.readyState === 4 || xhr.status === 200) {
+      // Chamar callback de sucesso.
+      if (cbSuccess) cbSuccess(xhr.responseText);
+    }
+  });
+
+  // Associar evento de erro.
+  xhr.addEventListener("error", function(e) {
+    // Chamar callback de erro.
+    if (cbError) cbError(e);
+
+    // Exibir mensagem de falha de conexão.
+    interactionError(safeGetLocaleMessage("ERROR.CONNECTION_FAIL"));
+  });
+
+  let data = null;
+
+  if (this.hasGoogleCalendar && (type=="d" || type=="e" )){
+    params.token = mainSystemFrame.g_access_token;
+    params.applicationName = this.applicationName;
+    if(type=="e"){
+      params.summary = params.event.summary;
+      params.location = params.event.location;
+      params.description = params.event.description;
+      params.endtime = params.event.end.dateTime;
+      params.endtimezone = params.event.end.timeZone;
+      params.starttime = params.event.start.dateTime;
+      params.starttimezone = params.event.start.timezone;
+      if(params.event.attendees){
+        let attendees;
+        for (let i = 0; i < params.event.attendees.length; ++i){
+          if(params.event.attendees.length != i && attendees == undefined){
+            attendees = params.event.attendees[i].email + ",";
+          } else {
+            attendees = attendees + params.event.attendees[i].email + ",";
+          }
+        }
+        attendees = attendees.slice(0, attendees.length - 1);
+        params.attendees = attendees;
+      }else {
+        params.attendees = "";
+      }
+    }
+  }
+
+  // Verificar se possui parâmetros adicionais.
+  if (params) {
+    data = "";
+    let keys = Object.keys(params);
+    for (let i = 0; i < keys.length; i++) {
+      data += keys[i] + "=" + URLEncode(params[keys[i]]);
+      if (i < keys.length) data += "&";
+    }
+  }
+  
+  // Mandar requisição para o servidor.
+  xhr.send(data);
+};
+/** 
+*  Importação de API Google Sing In.
+* @param client_id Credencias de autorização para aplicações web.
+* @param callback Valida se a resposta do token está ativa.
+**/
+HTMLCalendar.prototype.addGSI = function (client_id, callback) {
+  return new Promise((resolve, reject) => {
+    if (mainSystemFrame.g_client) {
+      resolve(false);
+    } else {
+      const import_gsi = mainSystemFrame.document.createElement('script');
+      import_gsi.src = 'https://accounts.google.com/gsi/client';
+      import_gsi.async = true;
+      import_gsi.defer = true;
+      import_gsi.onload = function () {
+        mainSystemFrame.g_client = mainSystemFrame.google.accounts.oauth2.initTokenClient({
+          client_id: client_id,
+          scope: 'https://www.googleapis.com/auth/calendar.events \
+                  https://www.googleapis.com/auth/userinfo.email',
+          callback: (tokenResponse) => {
+            if (tokenResponse.error !== undefined) {
+              reject(tokenResponse.error);
+            } else {
+              callback(tokenResponse.access_token);
+            }
+          },
+        });
+
+        resolve(true);
+      };
+
+      import_gsi.onerror = reject;
+      mainSystemFrame.document.body.appendChild(import_gsi);
+    }
+  });
+}
+
+/**
+* Importação da APIs Google.
+* @param api_key Chave da API Google calendar a ser utilizada.
+*/
+HTMLCalendar.prototype.addGAPI = function (api_key) {
+  return new Promise((resolve, reject) => {
+    if (mainSystemFrame.gapi) {
+      resolve();
+    } else {
+      const import_gapi = mainSystemFrame.document.createElement('script');
+      import_gapi.src = 'https://apis.google.com/js/api.js';
+      import_gapi.async = true;
+      import_gapi.defer = true;
+      import_gapi.onload = function () {
+        mainSystemFrame.gapi.load('client', function () {
+          mainSystemFrame.gapi.client.init({
+            apiKey: api_key,
+            discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest"],
+          }).then(resolve).catch(reject);
+        });
+      };
+      import_gapi.onerror = reject;
+      mainSystemFrame.document.body.appendChild(import_gapi);
+    }
+  });
+}
+
+/**
+* Inicialização de serviços Google.
+*/
+HTMLCalendar.prototype.addGoogleServices = async function (client_id, api_key) {
+  const storageVarName = this.getStorageName();
+  const cachedRequestToken = localStorage.getItem(storageVarName);
+
+  const tokenCallback = async (token) => {
+    if (token) {
+      localStorage.setItem(storageVarName, token);
+      mainSystemFrame.g_access_token = token;
+      try{
+        const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo?access_token=' + token);
+        const googleInfo = await response.json();
+        this.eventDropdownEmailSpan.innerText = googleInfo.email;
+      } catch(e) { }
+    }
+
+    this.updateDataGoogle();
+  };
+
+  const requestToken = () => {
+    if (mainSystemFrame.gapi.client.getToken() === null) {
+      mainSystemFrame.g_client.requestAccessToken({ prompt: 'consent' });
+    } else {
+      mainSystemFrame.g_client.requestAccessToken({ prompt: '' });
+    }
+  };
+
+  const result = await this.addGSI(client_id, tokenCallback);
+  await this.addGAPI(api_key);
+
+  if (result) {
+    try {
+      if (cachedRequestToken) {
+        mainSystemFrame.gapi.client.setToken(cachedRequestToken);
+        requestToken();
+      } else {
+        requestToken();
+      }
+    } catch (e) {
+      console.error(e);
+      requestToken();
+    }
+  } else {
+    if(cachedRequestToken){
+      tokenCallback(cachedRequestToken);
+    } else {
+      mainSystemFrame.g_client = null;
+      await this.addGSI(client_id, tokenCallback);
+      requestToken();
+    }
+  }
+  if(localStorage.getItem(storageVarName)){
+    try {
+      const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo?access_token=' + localStorage.getItem(storageVarName));
+      const googleInfo = await response.json();
+      this.eventDropdownEmailSpan.innerHTML = googleInfo.email;
+    } catch (e) { }
+  }
+};
+
+HTMLCalendar.prototype.updateDataGoogle = async function () {
+  // Exibir preloader.
+  this.showPreloader();
+  let response;
+  try {
+    const request = {
+      'calendarId': 'primary',
+      'timeMin': this.calendar.view.activeStart.toISOString(),
+      'timeMax': this.calendar.view.activeEnd.toISOString(),
+      'showDeleted': false,
+      'singleEvents': true,
+      'maxResults': 250,
+      'orderBy': 'startTime',
+    };
+    response = await mainSystemFrame.gapi.client.calendar.events.list(request);
+  } catch (err) {
+    localStorage.removeItem(this.getStorageName(), token);
+    this.hidePreloader();
+    return this.addGoogleServices();
+  }
+
+  const events = response.result.items;
+  if (!events || events.length == 0) {
+    // Limpar eventos na memória.
+    this.clearEvents();
+
+    // Esconder preloader.
+    this.hidePreloader();
+    return;
+  }
+  // Limpar eventos na memória.
+  this.clearEvents();
+
+  // Utilizar função batchRendering para evitar que o calendário
+  // seja renderizado novamente a cada operação de inserção.
+  this.calendar.batchRendering(() => {
+    for (const event of events) {
+
+      this.addEventToCalendarGoogle(
+        event.description,
+        event.start.dateTime,
+        event.end.dateTime,
+        event.id,
+        event.summary,
+        event.location ? event.location : false,
+        event.attendees ? event.attendees : false
+      );
+    }
+  });
+
+  this.logedOnGoogle = true;
+  // Esconder preloader.
+  this.hidePreloader();
+};
+
+/**
+* Adiciona evento ao Google Calendar.
+* @param g_event Objeto com todoas a informações do evento.
+*/
+HTMLCalendar.prototype.addEventGoogle = async function (g_event) {
+
+  //Monta as informações relacionadas ao evento.
+  let event = {
+    'summary': g_event.summary,
+    'description': g_event.description,
+    'start': {
+      'dateTime': g_event.start.dateTime,
+      'timeZone': g_event.start.timeZone
+    },
+    'end': {
+      'dateTime': g_event.end.dateTime,
+      'timeZone': g_event.end.timeZone
+    },
+    'recurrence': [
+      `RRULE:FREQ=${g_event.recurrence.freq};COUNT=${g_event.recurrence.count}`
+    ],
+    'reminders': {
+      'useDefault': true,
+    }
+  };
+
+  if(g_event.attendees){
+    event.attendees =g_event.attendees;
+  }
+
+  if(g_event.location){
+    event.location = g_event.location;
+  }
+
+  try {
+    // Insere o evento do calendário Google.
+    await mainSystemFrame.gapi.client.calendar.events.insert({
+      'calendarId': 'primary',
+      'resource': event,
+    })
+  } catch (err) {
+    return interactionError(safeGetLocaleMessage("ERROR.CONNECTION_FAIL"));
+  }
+  // Chama a atualização do calendário.
+   this.updateData();
+  
+};
+
+/**
+ * Adiciona um evento ao calendário.
+ * @param title Título/Descrição do evento.
+ * @param start Data inicial do evento.
+ * @param end Data final do evento.
+ * @param id Id do evento.
+ * @param description Descrição do evento.
+ * @param location Localização do evento.
+ * @param attendees Participantes do evento.
+ **/
+HTMLCalendar.prototype.addEventToCalendarGoogle = function(title, start, end, id, description, location, attendees) {
+  let eventStart = moment(start);
+  let eventEnd = end ? moment(end) : null;
+
+  // Adicionar evento ao calendário.
+  this.calendar.addEvent({
+    description: title,
+    id: id,
+    title: description,
+    start: eventStart.toISOString(),
+    end: eventEnd ? eventEnd.toISOString() : eventStart.toISOString(),
+    location: location,
+    attendees: attendees
+  });
+
+};
+
+/**
+ * Função responsavel por trocar a conta do usuário Google
+ **/
+HTMLCalendar.prototype.switchAccountGoogle = async function() {
+  await mainSystemFrame.g_client.requestAccessToken({ prompt: 'consent' });
+  localStorage.setItem(this.getStorageName(), mainSystemFrame.gapi.client.getToken());
+
+  this.updateDataGoogle();
+};
+
+HTMLCalendar.prototype.getStorageName = function() {
+  return "gauth_" + this.sys + "_" + this.formID + "_" + this.code + "_" + this.userId;
+};

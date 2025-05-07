@@ -1,0 +1,518 @@
+/**
+ * Método construtor do HTMLColorPicker. Responsável por criar o componente ColorPicker.
+ * @param sys - Indica o código do sistema.
+ * @param formID - Indica o código do formulário.
+ * @param posX - Posição do componente na tela em relação ao eixo X.
+ * @param posY - Posição do componente na tela em relação ao eixo Y.
+ * @param width - Largura do componente.
+ * @param heigth - Altura do componente.
+ * @param description - Descricao do componente.
+ * @param value - Valor do componente. 
+ **/
+function HTMLColorPicker(sys, formID, code, posX, posY, width, height, description, value) {
+  this.create(sys, formID, code, posX, posY, width, height, description, value);
+  this.style = 1;
+  this.isRGB = true;
+  this.inputname = "WFRInput" + this.code;
+}
+
+HTMLColorPicker.inherits(HTMLGroupBox);
+HTMLColorPicker.prototype.name = "HTMLColorPicker";
+HTMLColorPicker.prototype.alphaMax = "ff"; // "ff" no final = 1 de opacidade
+
+HTMLColorPicker.prototype.getValue = function() {
+  return this.value;
+};
+
+HTMLColorPicker.prototype.setValue = function(value, checkDependences, ignoreUpdate) {
+  let object = this;
+
+  if (typeof value === "string") {
+    // Ajustar valor recebido.
+    value = value.trim().toLowerCase();
+  }
+  this.callMethod(HTMLGroupBox, "setValue", [value, checkDependences]);
+
+  // Atualizar o valor do hidden.
+  this.hidden.setValue(value);
+
+  // Verificar se deve atualizar o próprio color picker.
+  if (!ignoreUpdate) {
+    // Verificar se está vazio.
+    if (value === undefined || value === null || value === "") {
+      // Definir a cor preta como padrão.
+      if (this.hasOpacity) {
+        value = "#000000" + this.alphaMax;
+      } else {
+        value = "#000000";
+      }
+    }
+
+    // Suporte adicional: Passando uma cor RGB ou RGBA,
+    // o componente faz a conversão automática para
+    // hexadecimal.
+    if (
+      value.startsWith("rgb(") ||
+      value.startsWith("rgba(")
+    ) {
+      // Convertar a cor para hexadecimal.
+      value = this.rgbToHex(value);
+    }
+
+    // Verificar se é um hexadecimal.
+    if (value.startsWith("#")) {
+      // Extrair o RGB/RGBA e HSL/HSLA da cor em hexadecimal.
+      let rgbColor = this.hexToRgb(value);
+      let hslColor = this.rgbToHsl(rgbColor.r, rgbColor.g, rgbColor.b);
+
+      // Atualizar os inputs do componente.
+      this.updateColorInputs({
+        hexString: (value.length === 9) ? value.substring(1, 7) : value,
+        hex8String: (value.length === 9) ? value : value + object.alphaMax,
+        rgb: rgbColor,
+        rgba: {
+          ...rgbColor,
+          a: (rgbColor.a === null || rgbColor.a === undefined) ? 1: rgbColor.a,
+        },
+        hsl: hslColor,
+        hsla: {
+          ...hslColor,
+          a: (rgbColor.a === null || rgbColor.a === undefined) ? 1: rgbColor.a,
+        },
+      }, false);
+
+      if (this.hasOpacity) {
+        // Atualizar o componente color picker.
+        this.updateColorPicker((value.length === 9) ? value : value + object.alphaMax, false);
+      } else {
+        // Atualizar o componente color picker.
+        this.updateColorPicker((value.length === 9) ? value.substring(1, 7) : value, false);
+      }
+    }
+  }
+};
+
+HTMLColorPicker.prototype.designComponent = function(doc) {
+  let object = this;
+
+  this.div.id = this.id;
+  this.callMethod(HTMLGroupBox, "designComponent", [doc]);
+
+  this.hidden = new HTMLHidden(this.sys, this.formID, this.code, this.value); 
+  this.hidden.inputname = this.inputname;
+  this.hidden.design(this.div);
+
+  // Importa libs Iro.
+  webrun.include("components/colorpicker/iro.min.js");
+
+  this.innerDiv = document.createElement("div");
+  this.innerDiv.id = "WFRCardBody" + this.code;
+  this.innerDiv.className = "card-body overflow-auto";
+  this.div.appendChild(this.innerDiv);
+
+  let colorPickerContainer= document.createElement("div");
+  colorPickerContainer.id = "ColorPickerContainer" + this.code;
+  colorPickerContainer.className = "container p-0";
+  this.innerDiv.appendChild(colorPickerContainer);
+
+  let colorPickerRow = document.createElement("div");
+  colorPickerRow.id = "ColorPickerRow" + this.code;
+  colorPickerRow.className = "row gx-2";
+  colorPickerContainer.appendChild(colorPickerRow);
+  
+  this.colorSampleCol = document.createElement("div");
+  this.colorSampleCol.id = "ColorSampleCol" + this.code;
+  this.colorSampleCol.className = "col-sm-4 rounded border border-3";
+  this.colorSampleCol.style = "margin-bottom: 8px; min-height: 40px";
+  colorPickerRow.appendChild(this.colorSampleCol);
+
+  let colorPickerCol = document.createElement("div");
+  colorPickerCol.id = "ColorPickerCol" + this.code;
+  colorPickerCol.className = "col-sm text-center";
+  colorPickerRow.appendChild(colorPickerCol);
+
+  this.boxPicker = document.createElement("div");
+  this.boxPicker.id = "WFRBoxPicker" + this.code;
+  colorPickerCol.appendChild(this.boxPicker);
+
+  // Inicializa elemento color picker.
+  this.boxPicker = new iro.ColorPicker("#WFRBoxPicker" + this.code, {
+    width: 100,
+    color: this.getValue(),
+    borderWidth: 2,
+    layoutDirection: "horizontal",
+    borderColor: isDarkMode() ? "#fff" : "#000",
+    layout: [
+      {
+        component: iro.ui.Box,
+      },
+      {
+        component: iro.ui.Slider,
+        options: {
+          id: "hue-slider",
+          sliderType: "hue"
+        }
+      },
+      {
+        component: iro.ui.Slider,
+        options: {
+          id: "saturation-slider",
+          sliderType: "saturation"
+        }
+      },
+      {
+        component: iro.ui.Slider,
+        options: {
+          id: "value-slider",
+          sliderType: "value"
+        }
+      },
+      ...(this.hasOpacity ? [{
+        component: iro.ui.Slider,
+        options: {
+          id: "alpha-slider",
+          sliderType: "alpha"
+        }
+      }] : []),
+    ],
+  });
+
+  // Adicionando cor a o semple color
+  this.colorSampleCol.style.backgroundColor = this.boxPicker.color.hexString;
+
+  // Evento ao modificar o elemento color picker.
+  this.boxPicker.on("color:change", function(color) {
+    object.updateColorInputs(color, true);
+  });
+
+  let colorContainerHex = document.createElement("div");
+  colorContainerHex.id = "colorContainerHex" + this.code;
+  colorContainerHex.className = "container p-0";
+  this.innerDiv.appendChild(colorContainerHex);
+
+  let colorRowHEX = document.createElement("div");
+  colorRowHEX.id = "ColorRow" + this.code;
+  colorRowHEX.className = "row";
+  colorContainerHex.appendChild(colorRowHEX);
+
+  let colorColtHex = document.createElement("div");
+  colorColtHex.id = "ColorColtHex" + this.code;
+  colorColtHex.className = "col";
+  colorColtHex.innerText = "HEX";
+  colorRowHEX.appendChild(colorColtHex);
+
+  this.colorInputHex = document.createElement("input");
+  this.colorInputHex.id = "ColorInputHex" + this.code;
+  this.colorInputHex.className = "form-control";
+  this.colorInputHex.type = "text";
+  this.colorInputHex.value = this.hasOpacity ?
+    this.boxPicker.color.hex8String : 
+    this.boxPicker.color.hexString;
+  this.colorInputHex.onchange = function() {
+    // Tratar valor do campo.
+    let value = this.value.trim().toLowerCase();
+
+    // Adicionar a hashtag se não existir.
+    if (!value.startsWith("#")) value = "#" + value;
+
+    // Verificar se possui opacidade e o hexadcimal não.
+    if (object.hasOpacity && value.length === 7) {
+      value += object.alphaMax;
+    }
+
+    // Atualizar valor do campo.
+    this.value = value;
+
+    // Atualizar componente color picker.
+    object.updateColorPicker(value, true);
+  };
+
+  colorColtHex.appendChild(this.colorInputHex);
+
+  let colorContainerRGBorHSV = document.createElement("div");
+  colorContainerRGBorHSV.id = "colorContainerRGBorHSV" + this.code;
+  colorContainerRGBorHSV.className = "container p-0";
+  this.innerDiv.appendChild(colorContainerRGBorHSV);
+
+  let colorRowRGBorHVL = document.createElement("div");
+  colorRowRGBorHVL.id = "colorRowRGBorHVL" + this.code;
+  colorRowRGBorHVL.className = "row gx-2";
+  colorContainerRGBorHSV.appendChild(colorRowRGBorHVL);
+
+  let colorColRorH = document.createElement("div");
+  colorColRorH.id = "ColorColRorH" + this.code;
+  colorColRorH.className = "col";
+  colorColRorH.innerText = "R";
+  colorRowRGBorHVL.appendChild(colorColRorH);
+
+  this.colorInputRorH = document.createElement("input");
+  this.colorInputRorH.id = "colorInputRorH" + this.code;
+  this.colorInputRorH.className = "form-control";
+  this.colorInputRorH.type = "number";
+  this.colorInputRorH.max = 255;
+  this.colorInputRorH.min = 0;
+  this.colorInputRorH.value = this.boxPicker.color.rgb.r;
+  this.colorInputRorH.onchange = function() { object.updateColorPicker(this.value, true) };
+  colorColRorH.appendChild(this.colorInputRorH);
+
+  let colorColGorS = document.createElement("div");
+  colorColGorS.id = "colorColGorS" + this.code;
+  colorColGorS.className = "col";
+  colorColGorS.innerText = "G";
+  colorRowRGBorHVL.appendChild(colorColGorS);
+
+  this.colorInputGorS = document.createElement("input");
+  this.colorInputGorS.id = "colorInputGorS" + this.code;
+  this.colorInputGorS.className = "form-control";
+  this.colorInputGorS.type = "number";
+  this.colorInputGorS.max = 255;
+  this.colorInputGorS.min = 0;
+  this.colorInputGorS.value = this.boxPicker.color.rgb.g;
+  this.colorInputGorS.onchange = function() { object.updateColorPicker(this.value, true) };
+  colorColGorS.appendChild(this.colorInputGorS);
+
+  let colorColBorL = document.createElement("div");
+  colorColBorL.id = "colorColBorL" + this.code;
+  colorColBorL.className = "col";
+  colorColBorL.innerText = "B";
+  colorRowRGBorHVL.appendChild(colorColBorL);
+
+  this.colorInputBorL = document.createElement("input");
+  this.colorInputBorL.id = "ColorInputBorL" + this.code;
+  this.colorInputBorL.className = "form-control";
+  this.colorInputBorL.type = "number";
+  this.colorInputBorL.max = 255;
+  this.colorInputBorL.min = 0;
+  this.colorInputBorL.value = this.boxPicker.color.rgb.b;
+  this.colorInputBorL.onchange = function() { object.updateColorPicker(this.value, true) };
+  colorColBorL.appendChild(this.colorInputBorL);
+
+  if (this.hasOpacity) {
+    let colorColA = document.createElement("div");
+    colorColA.id = "ColorColA" + this.code;
+    colorColA.className = "col";
+    colorColA.innerText = "A";
+    colorRowRGBorHVL.appendChild(colorColA);
+
+    this.colorInputA = document.createElement("input");
+    this.colorInputA.id = "ColorInputA" + this.code;
+    this.colorInputA.className = "form-control";
+    this.colorInputA.type = "number";
+    this.colorInputA.max = 1;
+    this.colorInputA.min = 0;
+    this.colorInputA.value = this.boxPicker.color.rgba.a;
+    this.colorInputA.onchange = function() { object.updateColorPicker(this.value, true) };
+    colorColA.appendChild(this.colorInputA);
+  }
+
+  let colorButtonCol = document.createElement("div");
+  colorButtonCol.id = "ColorButtonCol" + this.code;
+  colorButtonCol.className = "col d-flex align-items-end";
+  colorRowRGBorHVL.appendChild(colorButtonCol);
+
+  let colorRGBHSVToggle = document.createElement("button");
+  colorRGBHSVToggle.id = "ColorRGBHSVToggle" + this.code;
+  colorRGBHSVToggle.className = "btn btn-primary w-100";
+  colorRGBHSVToggle.type = "button";
+  colorRGBHSVToggle.innerText = (this.hasOpacity) ? "HSLA" : "HSL";
+  colorRGBHSVToggle.onclick = function() {
+    object.isRGB = !object.isRGB;
+
+    colorColRorH.innerText = object.isRGB ? "R" : "H";
+    object.colorInputRorH.max = object.isRGB ? 255 : 360;
+    colorColRorH.appendChild(object.colorInputRorH);
+
+    colorColGorS.innerText = object.isRGB ? "G" : "S";
+    object.colorInputGorS.max = object.isRGB ? 255 : 100;
+    colorColGorS.appendChild(object.colorInputGorS);
+
+    colorColBorL.innerText = object.isRGB ? "B" : "L";
+    object.colorInputBorL.max = object.isRGB ? 255 : 50;
+    colorColBorL.appendChild(object.colorInputBorL);
+
+    colorRGBHSVToggle.innerText = object.isRGB ? "HSL" : "RGB";
+    if (object.hasOpacity) colorRGBHSVToggle.innerText += "A";
+
+    object.updateColorInputs(object.boxPicker.color, true);
+  };
+
+  colorButtonCol.appendChild(colorRGBHSVToggle);
+
+};
+
+/**
+  * Converte uma cor de RGB para hexadecimal.
+  * @param rgb Cor em RGB.
+  */
+HTMLColorPicker.prototype.rgbToHex = function(rgb) {
+  if (rgb === undefined || rgb === null || rgb === "") return "";
+  if (typeof rgb === "string" && rgb.trim().startsWith("#")) return rgb.trim().toUpperCase();
+
+  const hex = (x) => ("0" + parseInt(x).toString(16)).slice(-2);
+  let rgbParts = null;
+
+  if (rgb.startsWith("rgba(")) {
+    rgbParts = rgb.match(/^rgba\((\d+),\s*(\d+),\s*(\d+),\s*(\d+)\)$/);
+    return ("#" + hex(rgbParts[1]) + hex(rgbParts[2]) + hex(rgbParts[3])).toUpperCase();
+  }
+
+  rgbParts = rgb.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
+  return ("#" + hex(rgbParts[1]) + hex(rgbParts[2]) + hex(rgbParts[3])).toUpperCase();
+};
+
+/**
+  * Converte uma cor de hexadecimal para RGB ou RGBA.
+  * @param hex Cor em hexadecimal.
+  */
+HTMLColorPicker.prototype.hexToRgb = function(hex) {
+  if (hex.length === 9) {
+    let result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+      r: parseInt(result[1], 16),
+      g: parseInt(result[2], 16),
+      b: parseInt(result[3], 16),
+      a: parseInt(result[4], 16) / 255,
+    } : { r: 0, g: 0, b: 0, a: 0 };
+  }
+
+  let result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result ? {
+    r: parseInt(result[1], 16),
+    g: parseInt(result[2], 16),
+    b: parseInt(result[3], 16),
+  } : { r: 0, g: 0, b: 0 };
+};
+
+/**
+ * Converte uma cor em RGB para HSL.
+ */
+HTMLColorPicker.prototype.rgbToHsl = function(r, g, b) {
+  r /= 255;
+  g /= 255;
+  b /= 255;
+  const l = Math.max(r, g, b);
+  const s = l - Math.min(r, g, b);
+  const h = s
+    ? l === r
+      ? (g - b) / s
+      : l === g
+      ? 2 + (b - r) / s
+      : 4 + (r - g) / s
+    : 0;
+
+  return {
+    h: Math.round(60 * h < 0 ? 60 * h + 360 : 60 * h),
+    s: Math.round(100 * (s ? (l <= 0.5 ? s / (2 * l - s) : s / (2 - (2 * l - s))) : 0)),
+    l: Math.round((100 * (2 * l - s)) / 2),
+  };
+};
+
+/**
+ * Converte o valor de um campo para numérico.
+ *
+ * A função faz a tratativa do tipo do valor e verifica
+ * se o campo está vazio.
+ *
+ * @param value Valor do campo.
+ * @param isFloat Valor lógico indicando se é um número decimal.
+ * @returns 
+ */
+HTMLColorPicker.prototype.convertFieldToValue = function(value, isFloat) {
+  if (typeof value === "string") {
+    value = value.trim();
+
+    if (isFloat) {
+      return (value.length > 0) ? parseFloat(value) : 0;
+    }
+
+    return (value.length > 0) ? parseInt(value, 10) : 0;
+  } else if (typeof value === "number") {
+    return value;
+  }
+
+  return 0;
+};
+
+HTMLColorPicker.prototype.updateColorInputs = function(color, updateValue) {
+  this.colorSampleCol.style.backgroundColor = color.hexString;
+
+  if (this.isRGB) {
+    this.colorInputRorH.value = color.rgb.r;
+    this.colorInputGorS.value = color.rgb.g;
+    this.colorInputBorL.value = color.rgb.b;
+  } else {
+    this.colorInputRorH.value = color.hsl.h;
+    this.colorInputGorS.value = color.hsl.s;
+    this.colorInputBorL.value = color.hsl.l;
+  }
+
+  if (this.hasOpacity) {
+    this.colorInputHex.value = color.hex8String;
+
+    // Obter o canal alpha e arredondar para 2 casas decimais.
+    let alphaChannel = this.isRGB ? color.rgba.a : color.hsla.a;
+    this.colorInputA.value = Math.round((alphaChannel + Number.EPSILON) * 100) / 100;
+  } else {
+    this.colorInputHex.value = color.hexString;
+  }
+
+  if (updateValue) {
+    if (this.hasOpacity) {
+      this.setValue(color.hex8String, true, true);
+    } else {
+      this.setValue(color.hexString, true, true);
+    }
+  }
+};
+
+HTMLColorPicker.prototype.updateColorPicker = function(color, updateValue) {
+  if (color.startsWith("#")) {
+    if (this.hasOpacity) this.boxPicker.color.hex8String = color;
+    else this.boxPicker.color.hexString = color;
+    this.colorSampleCol.backgroundColor = this.boxPicker.color.hexString;
+  } else {
+    if (this.hasOpacity) {
+      if (this.isRGB) {
+        this.boxPicker.color.rgba = {
+          r: this.convertFieldToValue(this.colorInputRorH.value),
+          g: this.convertFieldToValue(this.colorInputGorS.value),
+          b: this.convertFieldToValue(this.colorInputBorL.value),
+          a: this.convertFieldToValue(this.colorInputA.value),
+        };
+      } else {
+        this.boxPicker.color.hsla = {
+          h: this.convertFieldToValue(this.colorInputRorH.value),
+          s: this.convertFieldToValue(this.colorInputGorS.value),
+          l: this.convertFieldToValue(this.colorInputBorL.value),
+          a: this.convertFieldToValue(this.colorInputA.value),
+        };
+      }
+    } else {
+      if (this.isRGB) {
+        this.boxPicker.color.rgb = {
+          r: this.convertFieldToValue(this.colorInputRorH.value),
+          g: this.convertFieldToValue(this.colorInputGorS.value),
+          b: this.convertFieldToValue(this.colorInputBorL.value),
+        };
+      } else {
+        this.boxPicker.color.hsl = {
+          h: this.convertFieldToValue(this.colorInputRorH.value),
+          s: this.convertFieldToValue(this.colorInputGorS.value),
+          l: this.convertFieldToValue(this.colorInputBorL.value),
+        };
+      }
+    }
+  }
+
+  if (updateValue) {
+    if (this.hasOpacity) {
+      this.setValue(this.boxPicker.color.hex8String, true, true);
+    } else {
+      this.setValue(this.boxPicker.color.hexString, true, true);
+    }
+  }
+};
+
+HTMLColorPicker.prototype.toPermissionMode = function() {
+  this.callMethod(HTMLElementBase, "toPermissionMode");
+};

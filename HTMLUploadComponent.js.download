@@ -1,0 +1,573 @@
+function HTMLUploadComponent(sys, formID, code, posX, posY, width, height, description, value) {
+  this.create(sys, formID, code, posX, posY, width, height, description, value);
+  this.isFileListOpen = false;
+}
+
+HTMLUploadComponent.inherits(HTMLElementBase);
+HTMLUploadComponent.prototype.zindex = 0;
+HTMLUploadComponent.prototype.name = "HTMLUploadComponent";
+HTMLUploadComponent.prototype.tabable = false;
+
+HTMLUploadComponent.prototype.focus = function() { return false; };
+HTMLUploadComponent.prototype.blur = function() { return false; };
+HTMLUploadComponent.prototype.toPermissionMode = function () { };
+
+/**
+ * Sobrescreve o método do HTMLElementBase devido a sua estruturação.
+ * @param v Valor lógico para habilitar/desabilitar o componente.
+ */
+HTMLUploadComponent.prototype.setEnabled = function(v) {
+  this.callMethod(HTMLElementBase, "setEnabled", [v]);
+
+  // Verificar se está listando arquivos para upload e o componente foi desabilitado.
+  if (this.isFileListOpen && !v) {
+    // Exibir tela inicial do componente.
+    this.showUploadPanel();
+  }
+
+  if (this.div) {
+    // Alterar o estilo do cursor.
+    if (!this.isFileListOpen) this.div.style.cursor = this.enabled ? "pointer" : "default";
+
+    // Alterar a cor da borda.
+    this.div.style.borderColor = null;
+  }
+};
+
+/**
+ * Altera a cor da borda do componente para indicar a área dropável.
+ */
+ HTMLUploadComponent.prototype.highlight = function() {
+  if (this.isFileListOpen || !this.enabled) {
+    this.div.style.borderColor = null;
+  } else {
+    this.div.style.setProperty("border-color", "var(--bs-primary)", "important");
+  }
+};
+
+/**
+ * Reverte a cor da borda do componente para o padrão.
+ */
+HTMLUploadComponent.prototype.unhighlight = function() {
+  this.div.style.borderColor = null;
+};
+
+/**
+ * Limpa o componente.
+ */
+HTMLUploadComponent.prototype.clearComponent = function() {
+  if (this.div.classList.contains("bg-light")) this.div.classList.remove("bg-light");
+  if (this.div.classList.contains("border")) this.div.classList.remove("border");
+
+  this.div.innerHTML = "";
+  this.isFileListOpen = false;
+
+  this.div.style.borderStyle = null;
+  this.div.style.borderWidth = null;
+  this.div.style.borderRadius = null;
+  this.div.style.cursor = null;
+};
+
+/**
+ * Desenha o painel indicativo da região de upload.
+ */
+HTMLUploadComponent.prototype.showUploadPanel = function() {
+  this.clearComponent();
+
+  if (!this.div.classList.contains("bg-light")) this.div.classList.add("bg-light");
+  if (!this.div.classList.contains("border")) this.div.classList.add("border");
+
+  this.div.style.setProperty("border-style", "dashed", "important");
+  this.div.style.setProperty("border-width", "2px", "important");
+  this.div.style.setProperty("border-radius", "0.35rem", "important");
+  this.div.style.cursor = "pointer";
+
+  let uploadContent = document.createElement("div");
+  uploadContent.className = "d-flex flex-column align-items-center justify-content-center flex-fill p-4 w-100 h-100";
+  this.div.appendChild(uploadContent);
+
+  let uploadIcon = document.createElement("i");
+  uploadIcon.className = "fas fa-upload text-muted mb-3";
+  uploadIcon.style.fontSize = "3rem";
+  uploadContent.appendChild(uploadIcon);
+
+  let uploadTitle = document.createElement("h6");
+  uploadTitle.className = "text-muted font-weight-bold mb-1";
+  uploadTitle.innerText = getLocaleMessage("LABEL.UPLOAD_FILES");
+  uploadContent.appendChild(uploadTitle);
+
+  let uploadText = document.createElement("p");
+  uploadText.className = "text-muted mb-0";
+  uploadText.innerText = getLocaleMessage("LABEL.CLICK_OR_DRAG_FILES_HERE");
+  uploadContent.appendChild(uploadText);
+};
+
+HTMLUploadComponent.prototype.designComponent = function(doc) {
+  let object = this;
+
+  if (this.onclick) {
+    this.div.onclick = this.onclick;
+    this.div.onmouseover = "pointer";
+    this.div.style.cursor = "pointer";
+  }
+
+  this.div.id = this.id;
+  this.div.className += " card d-flex flex-column overflow-hidden";
+  this.divClass = this.div.className;
+
+  this.showUploadPanel();
+
+  /**
+   * Evento para destacar as bordas do componente.
+   */
+  let highlightEvent = function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    object.highlight();
+  };
+
+  /**
+   * Evento para restaurar as bordas do componente.
+   */
+  let unhighlightEvent = function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    object.unhighlight();
+  };
+
+  // Associar eventos ao elemento principal do componente.
+  this.div.addEventListener("mouseover", highlightEvent, false);
+  this.div.addEventListener("dragenter", highlightEvent, false);
+  this.div.addEventListener("dragover", highlightEvent, false);
+
+  this.div.addEventListener("mouseout", unhighlightEvent, false);
+  this.div.addEventListener("dragleave", unhighlightEvent, false);
+
+  this.div.addEventListener("drop", function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    object.unhighlight();
+
+    // Verificar se o componente está habilitado.
+    if (object.enabled) {
+      object.onDropFiles(e.dataTransfer.files);
+    }
+  }, false);
+
+  this.div.addEventListener("click", function(e) {
+    e.stopPropagation();
+
+    // Verificar se a lista de arquivos não está aberta e se o componente está habilitado.
+    if (!object.isFileListOpen && object.enabled) {
+      let inputFile = document.createElement("input");
+      inputFile.type = "file";
+      inputFile.multiple = (object.ModoDeUpload === "multiple");
+      inputFile.style.setProperty("display", "none");
+
+      inputFile.addEventListener("change", function() {
+        object.onDropFiles(inputFile.files);
+      });
+
+      inputFile.click();
+    }
+  }, false);
+};
+
+/**
+ * Converter valores de tamanho de arquivo para apresentação ao usuário.
+ */
+HTMLUploadComponent.prototype.formatBytes = function(bytes) {
+  if (bytes === 0) return "0 Byte";
+  let sizes = ["Bytes", "KB", "MB", "GB", "TB", "PB"];
+  let i = parseInt(Math.floor(Math.log(bytes) / Math.log(1024)));
+  return Math.round(bytes / Math.pow(1024, i), 2) + " " + sizes[i];
+};
+
+/**
+ * Função chamada quando arquivos são selecionados no componente.
+ * @param files Lista de arquivos.
+ */
+HTMLUploadComponent.prototype.onDropFiles = function(files) {
+  if (!Array.isArray(files)) {
+    files = Array.from(files);
+  }
+
+  // Verificação de segurança pra se tiver mais de um arquivo e o componente
+  // não for upload de múltiplos arquivos.
+  if (this.ModoDeUpload !== "multiple" && files.length > 1) {
+    // Somente o primeiro arquivo.
+    files = [files[0]];
+  }
+
+  let canUpload = true;
+
+  // Verificar se possui o evento Ao Anexar associado.
+  if (this.AoAnexar) {
+    let list_files = [];
+
+    for (let i = 0; i < files.length; i++) {
+      list_files.push([
+        /* 1: Nome do Arquivo */ files[i].name,
+        /* 2: Tamanho do Arquivo */ files[i].size,
+        /* 3: Tipo do Arquivo */ files[i].type
+      ]);
+    }
+
+    // Chamar o fluxo Ao Anexar passando a lista de arquivos.
+    canUpload = this.AoAnexar(list_files);
+  }
+
+  // Verificar se pode fazer o upload dos arquivos.
+  if (canUpload) {
+    // Exibir a lista de arquivos para upload.
+    this.showUploadFilesList(files);
+  }
+};
+
+/**
+ * Desenhar a lista de arquivos a serem transferidos para o servidor.
+ * @param files Lista de arquivos.
+ */
+HTMLUploadComponent.prototype.showUploadFilesList = function(files) {
+  // Verificar se possui arquivos para listar.
+  if (!files || files.length > 0) {
+    let object = this;
+
+    // Limpar a div.
+    this.div.innerHTML = "";
+
+    this.clearComponent();
+    this.isFileListOpen = true;
+
+    let cardHeader = document.createElement("div");
+    cardHeader.className = "card-header d-flex flex-row-reverse";
+    this.div.appendChild(cardHeader);
+
+    // Criar botão de realizar upload.
+    let btnUpload = document.createElement("button");
+    btnUpload.className = "btn btn-outline-success";
+    btnUpload.innerText = getLocaleMessage("LABEL.UPLOAD");
+    btnUpload.setAttribute("type", "button");
+    btnUpload.style.fontSize = "0.9rem";
+    cardHeader.appendChild(btnUpload);
+
+    // Associar evento ao botão de realizar upload.
+    btnUpload.addEventListener("click", function(e) {
+      e.stopPropagation();
+
+      // Impedir que o botão de Upload seja clicado mais de uma vez.
+      btnUpload.disabled = true;
+
+      // Enviar arquivos para o servidor.
+      object.uploadFiles(files);
+    });
+
+    // Criar botão de cancelar.
+    let btnCancel = document.createElement("button");
+    btnCancel.className = "btn btn-outline-danger me-3";
+    btnCancel.innerText = getLocaleMessage("LABEL.CANCEL");
+    btnCancel.setAttribute("type", "button");
+    btnCancel.style.fontSize = "0.9rem";
+    cardHeader.appendChild(btnCancel);
+
+    // Associar evento ao botão de cancelar.
+    btnCancel.addEventListener("click", function(e) {
+      e.stopPropagation();
+      object.showUploadPanel();
+    });
+
+    let ul = document.createElement("ul");
+    ul.className = "list-group list-group-flush mb-0 flex-fill overflow-auto";
+    this.div.appendChild(ul);
+
+    for (const fileItem of files) {
+      let li = document.createElement("li");
+      li.className = "list-group-item";
+      ul.appendChild(li);
+
+      let line = document.createElement("div");
+      line.className = "row no-gutters";
+      li.appendChild(line);
+
+      let divImage = document.createElement("div");
+      divImage.className = "d-flex col-1 align-items-center justify-content-center";
+      line.appendChild(divImage);
+
+      if (fileItem.type.match(/image.*/)) {
+        let fileImagePreview = document.createElement("img");
+        fileImagePreview.className = "img-fluid";
+        fileImagePreview.src = window.URL.createObjectURL(fileItem);
+        fileImagePreview.alt = "";
+        divImage.appendChild(fileImagePreview);
+      } else {
+        let fileImagePreview = document.createElement("div");
+        fileImagePreview.className = "align-items-center";
+        fileImagePreview.setAttribute("height", "70");
+        fileImagePreview.setAttribute("width", "70");
+        divImage.appendChild(fileImagePreview);
+
+        let fileIconPreview = document.createElement("i");
+        fileIconPreview.className = "fas fa-file";
+        fileIconPreview.style.fontSize = "1.5rem";
+        fileImagePreview.appendChild(fileIconPreview);
+      }
+
+      let contentDiv = document.createElement("div");
+      contentDiv.className = "col-9 pl-3";
+      line.appendChild(contentDiv);
+
+      let title = document.createElement("h6");
+      title.className = "text-truncate mb-1 py-1";
+      title.innerText = fileItem.name;
+      contentDiv.appendChild(title);
+
+      let description = document.createElement("p");
+      description.className = "text-muted mb-0";
+      description.style.fontSize = "0.9rem";
+      description.innerText = getLocaleMessage("LABEL.TYPE") + ": " + fileItem.type + " | " +
+        getLocaleMessage("LABEL.SIZE") + ": " + this.formatBytes(fileItem.size);
+      contentDiv.appendChild(description);
+
+      let divRemoveButton = document.createElement("div");
+      divRemoveButton.className = "col-2 d-flex align-items-center justify-content-end";
+      line.appendChild(divRemoveButton);
+
+      let removeButton = document.createElement("button");
+      removeButton.className = "btn btn-outline-danger px-2 py-1";
+      removeButton.setAttribute("type", "button");
+      removeButton.style.fontSize = "0.9rem";
+      divRemoveButton.appendChild(removeButton);
+
+      let iconRemoveButton = document.createElement("i");
+      iconRemoveButton.className = "far fa-trash-alt";
+      removeButton.appendChild(iconRemoveButton);
+
+      removeButton.addEventListener("click", function(e) {
+        e.stopPropagation();
+
+        // Obter o índice do arquivo na lista.
+        let fileItemIndex = files.indexOf(fileItem);
+        if (fileItemIndex >= 0) {
+          // Remover arquivo da lista de arquivos.
+          files.splice(fileItemIndex, 1);
+
+          // Verificar se a lista está vazia.
+          if (files.length == 0) {
+            // Exibir tela inicial do componente.
+            object.showUploadPanel();
+          } else {
+            // Atualizar lista de arquivos.
+            object.showUploadFilesList(files);
+          }
+        }
+      });
+    }
+  } else {
+    // Exibir tela inicial do componente.
+    object.showUploadPanel();
+  }
+};
+
+/**
+ * Realiza o upload dos arquivos para o servidor.
+ * @param files Lista de arquivos a serem enviados.
+ */
+HTMLUploadComponent.prototype.uploadFiles = function(files) {
+  let object = this;
+
+  // Limpar o componente.
+  this.div.innerHTML = "";
+
+  // Criar o conteúdo da tela de upload.
+  let baseUserView = document.createElement("div");
+  baseUserView.className = "d-flex flex-column flex-fill align-items-center justify-content-center p-4";
+  this.div.appendChild(baseUserView);
+
+  let divRowUploadCounter = document.createElement("div");
+  divRowUploadCounter.className = "d-flex flex-row align-items-center w-100 mb-1";
+  baseUserView.appendChild(divRowUploadCounter);
+
+  let uploadInfo = document.createElement("small");
+  uploadInfo.className = "flex-fill flex-row text-muted mb-0";
+  uploadInfo.innerText = getLocaleMessage("LABEL.SENDING") + "...";
+  divRowUploadCounter.appendChild(uploadInfo);
+
+  let uploadCounter = document.createElement("small");
+  uploadCounter.className = "flex-row text-muted mb-0";
+  divRowUploadCounter.appendChild(uploadCounter);
+
+  // Criar a barra de progresso do upload.
+  let divRowProgressBar = document.createElement("div");
+  divRowProgressBar.className = "d-flex flex-row progress w-100";
+  divRowProgressBar.style.setProperty("height", "30px", "important");
+  baseUserView.appendChild(divRowProgressBar);
+
+  let progressBar = document.createElement("div");
+  progressBar.className = "progress-bar bg-success";
+  progressBar.setAttribute("role", "progress");
+  divRowProgressBar.appendChild(progressBar);
+
+  // Criar a div dos botões do upload.
+  let divRowActions = document.createElement("div");
+  divRowActions.className = "d-flex flex-row align-items-center justify-content-end w-100 mt-2";
+  baseUserView.appendChild(divRowActions);
+
+  // Criar botão de cancelar.
+  let btnCancel = document.createElement("button");
+  btnCancel.className = "btn btn-outline-secondary";
+  btnCancel.innerText = getLocaleMessage("LABEL.CANCEL");
+  btnCancel.setAttribute("type", "button");
+  btnCancel.style.fontSize = "0.9rem";
+  divRowActions.appendChild(btnCancel);
+
+  // Associar evento ao botão de cancelar.
+  btnCancel.addEventListener("click", function(e) {
+    e.stopPropagation();
+
+    try {
+      // Cancelar o upload.
+      xhr.abort();
+    } catch (e) {
+      console.error(e);
+
+      // Exibir mensagem de erro.
+      let msgErro = new HTMLMessage();
+      msgErro.showErrorMessage(
+        getLocaleMessage("LABEL.ERROR"),
+        null,
+        null,
+        e
+      );
+
+      // Exibir tela inicial do componente.
+      object.showUploadPanel();
+    }
+  });
+
+  // Criar o XMLHttpRequest.
+  const xhr = new XMLHttpRequest();
+
+  xhr.open(
+    "POST",
+    "uploadMultipleFiles.do?sys=" + this.sys +
+      "&formID=" + this.formID +
+      "&comID=" + this.code +
+      "&url=",
+    true
+  );
+
+  xhr.addEventListener("load", function() {
+    let message = new HTMLMessage();
+
+    try {
+      // Status de operação concluída.
+      if (xhr.readyState === 4) {
+        if (xhr.status >= 200 && xhr.status <= 299) {
+          if (xhr.responseText) {
+            let frame = document.createElement("iframe");
+            frame.className = "d-none border-0 m-0 p-0";
+            frame.style.width = "0px";
+            frame.style.height = "0px";
+            frame.srcdoc = xhr.responseText;
+            document.body.appendChild(frame);
+          }
+
+          // Verificar se não possui evento Ao Enviar.
+          if (!object.AoEnviar) {
+            // Exibir mensagem de sucesso.
+            message.showSuccessMessage(
+              getLocaleMessage("LABEL.UPLOAD_FILES"),
+              getLocaleMessage("INFO.SUCCESSFULL_SAVED_FILE"),
+              null,
+            );
+          }
+        } else if (xhr.status === 400) {
+          // Tratar a resposta do servidor.
+          let res = JSON.parse(xhr.responseText);
+
+          // Exibir mensagem de erro.
+          message.showErrorMessage(
+            res.title,
+            null,
+            null,
+            res.stack
+          );
+        } else {
+          // Exibir mensagem de erro.
+          message.showErrorMessage(
+            getLocaleMessage("LABEL.ERROR"),
+            getLocaleMessage("LABEL.FAIL_ON_SEND_FILE"),
+            getLocaleMessage("ERROR.SEND_ERROR_DESC")
+          );
+        }
+      }
+    } catch (e) {
+      console.error(e);
+
+      // Exibir mensagem de erro.
+      message.showErrorMessage(getLocaleMessage("LABEL.ERROR"), null, null, e);
+    }
+
+    // Exibir tela inicial do componente.
+    object.showUploadPanel();
+  });
+
+  // Verificar se o navegador tem suporte ao evento de progresso de upload.
+  if (xhr.upload) {
+    // Anexando evento ao status de upload.
+    xhr.upload.addEventListener("progress", function(e) {
+      let percent = Math.round((e.loaded / e.total) * 100);
+      progressBar.style.width = percent + "%";
+      uploadCounter.innerText = object.formatBytes(e.loaded) + "/" + object.formatBytes(e.total);
+
+      if (percent >= 100) {
+        uploadInfo.innerText = getLocaleMessage("INFO.CONCLUDING") + "...";
+      } else {
+        uploadInfo.innerText = percent + "% " + getLocaleMessage("INFO.TRANSFERRED");
+      }
+    });
+  } else {
+    // Definir invariação na barra de progresso.
+    progressBar.className = "progress-bar progress-bar-striped progress-bar-animated";
+    progressBar.style.width = "100%";
+  }
+
+  xhr.addEventListener("error", function() {
+    // Exibir mensagem de erro.
+    let msgErro = new HTMLMessage();
+    msgErro.showErrorMessage(
+      getLocaleMessage("LABEL.FAIL_ON_SEND_FILE"),
+      getLocaleMessage("ERROR.CONNECTION_FAIL")
+    );
+
+    // Exibir tela inicial do componente.
+    object.showUploadPanel();
+  });
+
+  xhr.addEventListener("abort", function() {
+    // Exibir tela inicial do componente.
+    object.showUploadPanel();
+  });
+
+  // Criar o FormData e envia para upload.
+  const formData = new FormData();
+
+  // Verificar se é upload de múltiplos arquivos.
+  if (this.ModoDeUpload === "multiple") {
+    // Anexar os arquivos ao FormData.
+    for (const file of files) {
+      formData.append("upload1", file);
+    }
+  } else {
+    // Anexar o arquivo ao FormData.
+    formData.append("upload1", files[0]);
+  }
+
+  // Enviar arquivos para o servidor.
+  xhr.send(formData);
+};
+
+HTMLUploadComponent.prototype.toPermissionMode = function() {
+  this.callMethod(HTMLElementBase, "toPermissionMode");
+};

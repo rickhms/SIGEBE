@@ -1,0 +1,699 @@
+/**
+ * Método construtor do HTMLTabComponent. Responsável por criar o componente Aba.
+ * @param sys Indica o código do sistema.
+ * @param formID Indica o código do formulário.
+ * @param posX Posição do componente na tela em relação ao eixo X.
+ * @param posY Posição do componente na tela em relação ao eixo Y.
+ * @param width Largura do componente.
+ * @param heigth Altura do componente.
+ * @param description Descricao do componente.
+ * @param value Valor do componente.
+ **/
+function HTMLTabComponent(sys, formID, code, posX, posY, width, height, description, value, showValue) {
+  this.create(sys, formID, code, posX, posY, width, height, description, value);
+  this.openTabs = [];
+  this.activeTab = null;
+}
+
+/**
+ * Herança do objeto.
+ **/
+HTMLTabComponent.inherits(HTMLElementBase);
+
+/**
+ * Setando propriedades do componente.
+ **/
+HTMLTabComponent.prototype.name = "HTMLTabComponent";
+HTMLTabComponent.prototype.tabable = false;
+
+/**
+ * Sobrescreve o método do HTMLElementBase devido a sua estruturação.
+ * @param v Valor lógico para habilitar/desabilitar o componente.
+ */
+HTMLTabComponent.prototype.setEnabled = function(v) {
+  this.callMethod(HTMLElementBase, "setEnabled", [v]);
+
+  // Habilitar/desabilitar as abas.
+  for (let i = 0; i < this.openTabs.length; i++) {
+    if (this.openTabs[i]) {
+      if (this.openTabs[i].tabButtonElement) this.openTabs[i].tabButtonElement.disabled = !v;
+      if (this.openTabs[i].undockButton) this.openTabs[i].undockButton.disabled = !v;
+      if (this.openTabs[i].closeButton) this.openTabs[i].closeButton.disabled = !v;
+    }
+  }
+};
+
+/**
+ * Responsável por desenhar o HTML do componente Aba.
+ * @param doc documento onde o componente será inserido.
+ **/
+HTMLTabComponent.prototype.designComponent = function(doc) {
+  // Criar div de dentro para ajustar o layout.
+  this.innerDiv = document.createElement("div");
+  this.innerDiv.className = "d-flex flex-column w-100 h-100";
+  this.div.appendChild(this.innerDiv);
+
+  // Criar o elemento base das abas.
+  this.tabsDiv = document.createElement("ul");
+  this.tabsDiv.className = "nav nav-tabs w-100"; // Bootstrap
+  this.innerDiv.appendChild(this.tabsDiv);
+
+  // Criar div do conteúdo das abas.
+  this.tabsContent = document.createElement("div");
+  this.tabsContent.className = "tab-content flex-fill"; // Bootstrap
+  this.innerDiv.appendChild(this.tabsContent);
+
+  // Verificar se possui abas a serem abertas na inicialização.
+  if (this.ListaDeFormularios && typeof this.ListaDeFormularios === "string" && this.ListaDeFormularios.trim().length > 0) {
+    // Obter a lista de formulários a serem abertos.
+    let tabsList = (this.ListaDeFormularios.indexOf(",")) >= 0 ?
+      this.ListaDeFormularios.trim().split(",") : [this.ListaDeFormularios.trim()];
+
+    // Obter a lista de informações dos formulários.
+    this.getFormsInfos(tabsList).then((formsInfos) => {
+      for (let i = 0; i < formsInfos.length; i++) {
+        // Adicionar a aba.
+        this.addFormTab(formsInfos[i].description, formsInfos[i].code);
+      }
+    });
+  }
+};
+
+/**
+ * Adiciona uma aba ao componente.
+ * @param id ID da aba.
+ * @param title Título da aba.
+ * @param onUndock Função a ser executada quando a aba for desanexada.
+ * @param onUpdate Função a ser executada quando a aba for atualizada.
+ */
+HTMLTabComponent.prototype.addTab = function(id, title, onUndock, onUpdate) {
+  let object = this;
+  let tabButtonArea = null;
+  let undockButton = null;
+  let updateButton = null;
+  let closeButton = null;
+
+  // Verificar se não especificou o ID e gerar um.
+  if (!id) id = "tab-" + getRandomCode();
+
+  // Verificar se já existe uma aba com o ID especificado.
+  if (this.getTabById(id)) {
+    // Ativar a aba.
+    this.activateTab(id);
+    return;
+  }
+
+  // Criar o elemento da aba.
+  let tabElement = document.createElement("li");
+  tabElement.className = "nav-item"; // Bootstrap
+  this.tabsDiv.appendChild(tabElement);
+
+  // Criar o botão da aba.
+  let tabButtonElement = document.createElement("button");
+  tabButtonElement.id = id;
+  tabButtonElement.type = "button";
+  tabButtonElement.className = "nav-link d-flex flex-row align-items-center text-overflow"; // Bootstrap
+  tabButtonElement.setAttribute("data-bs-toggle", "tab"); // Bootstrap
+  tabButtonElement.setAttribute("data-bs-target", "#" + id + "-content"); // Bootstrap
+  tabButtonElement.setAttribute("role", "tab");
+  tabButtonElement.setAttribute("aria-controls", id + "-content");
+  tabButtonElement.setAttribute("aria-selected", "false");
+  tabElement.appendChild(tabButtonElement);
+
+  // Verificar se possui tamanho máximo definido.
+  if (this.autoAjuste && typeof this.autoAjuste === "string" && this.autoAjuste.length > 0 && this.autoAjuste != "0") {
+    // Definir o tamanho máximo da aba.
+    tabButtonElement.style.maxWidth = this.autoAjuste + "px";
+  }
+
+  // Criar o elemento do título da aba.
+  let tabButtonText = document.createElement("span");
+  tabButtonText.innerText = title;
+  tabButtonElement.appendChild(tabButtonText);
+
+  this.hasCloseButton = (this.FecharAba && typeof this.FecharAba === "string" && this.FecharAba.trim().toLowerCase() === "true");
+  this.hasUndockButton = (onUndock && typeof onUndock === "function" && this.Desdocar && typeof this.Desdocar === "string" && this.Desdocar.trim().toLowerCase() === "true");
+  this.hasUpdateButton = (onUpdate && typeof onUpdate === "function" && this.isDevelopmentMode());
+
+  // Verificar se possui algum botão.
+  if (this.hasCloseButton || this.hasUndockButton || this.hasUpdateButton) {
+    tabButtonText.className += " me-1"; // Bootstrap
+
+    tabButtonArea = document.createElement("span");
+    tabButtonArea.className = "btn-group ms-2"; // Bootstrap
+    tabButtonElement.appendChild(tabButtonArea);
+  }
+
+  // Verificar se possui botão de atualizar.
+  if (this.hasUpdateButton) {
+    // Criar botão de atualizar aba.
+    updateButton = document.createElement("button");
+    updateButton.type = "button";
+    updateButton.className = "btn btn-light border d-inline-flex align-items-center tab-close-button"; // Bootstrap
+    updateButton.style.padding = "0.35rem";
+    updateButton.title = safeGetLocaleMessage("LABEL.REFRESH");
+    tabButtonArea.appendChild(updateButton);
+
+    // Criar ícone do botão de atualizar aba.
+    let updateButtonIcon = document.createElement("i");
+    updateButtonIcon.className = "fas fa-sync-alt d-flex align-items-center justify-content-center"; // Font Awesome
+    updateButtonIcon.style.fontSize = "0.75rem";
+    updateButton.appendChild(updateButtonIcon);
+
+    // Associar evento de clique ao botão de atualizar aba.
+    updateButton.addEventListener("click", function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      onUpdate();
+    });
+  }
+
+  // Verificar se possui ação de desdocar aba.
+  if (this.hasUndockButton) {
+    // Criar botão de desdocar aba.
+    undockButton = document.createElement("button");
+    undockButton.type = "button";
+    undockButton.className = "btn btn-light border d-inline-flex align-items-center tab-undock-button"; // Bootstrap
+    undockButton.style.padding = "0.35rem";
+    undockButton.title = safeGetLocaleMessage("LABEL.GRID_UNGROUP_COLUMN");
+    tabButtonArea.appendChild(undockButton);
+
+    // Criar ícone do botão de desdocar aba.
+    let undockButtonIcon = document.createElement("i");
+    undockButtonIcon.className = "fas fa-expand d-flex align-items-center justify-content-center"; // Font Awesome
+    undockButtonIcon.style.fontSize = "0.75rem";
+    undockButton.appendChild(undockButtonIcon);
+
+    // Associar evento de clique ao botão de desdocar aba.
+    undockButton.addEventListener("click", function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      onUndock();
+    });
+  }
+
+  // Verificar se possui ação de fechar aba.
+  if (this.hasCloseButton) {
+    // Criar botão de fechar aba.
+    closeButton = document.createElement("button");
+    closeButton.type = "button";
+    closeButton.className = "btn btn-light border d-inline-flex align-items-center tab-close-button"; // Bootstrap
+    closeButton.style.padding = "0.35rem";
+    closeButton.title = safeGetLocaleMessage("LABEL.CLOSE");
+    tabButtonArea.appendChild(closeButton);
+
+    // Criar ícone do botão de fechar aba.
+    let closeButtonIcon = document.createElement("i");
+    closeButtonIcon.className = "fas fa-times d-flex align-items-center justify-content-center"; // Font Awesome
+    closeButtonIcon.style.fontSize = "0.75rem";
+    closeButton.appendChild(closeButtonIcon);
+
+    // Associar evento de clique ao botão de fechar aba.
+    closeButton.addEventListener("click", function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      object.removeTab(id);
+    });
+    
+    // Associar evento de mouseDown ao clicar na Aba
+    tabButtonElement.addEventListener("mousedown", function(e) {
+      object.closeTabWithMiddleMouseButton(e)
+    })
+  }
+
+  // Criar div do conteúdo da aba.
+  let tabContentElement = document.createElement("div");
+  tabContentElement.id = id + "-content";
+  tabContentElement.className = "tab-pane w-100 h-100"; // Bootstrap
+  tabContentElement.setAttribute("role", "tabpanel");
+  tabContentElement.setAttribute("aria-labelledby", id);
+  this.tabsContent.appendChild(tabContentElement);
+
+  // Inicializar a aba do Bootstrap.
+  let tabTrigger = new bootstrap.Tab(tabButtonElement);
+  tabButtonElement.addEventListener("click", function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Ativar a aba.
+    tabTrigger.show();
+  });
+
+  // Montar objeto de retorno.
+  let tab = {
+    id: id,
+    title: title,
+    tabElement: tabElement,
+    tabButtonElement: tabButtonElement,
+    tabContentElement: tabContentElement,
+    tabTrigger: tabTrigger,
+    tabButtonArea: tabButtonArea,
+    undockButton: undockButton,
+    updateButton: updateButton,
+    closeButton: closeButton
+  };
+
+  // Associar evento de exibição da aba.
+  tabButtonElement.addEventListener("show.bs.tab", function(e) {
+    object.activeTab = tab;
+  });
+
+  // Adicionar aba ao array de abas abertas.
+  this.openTabs.push(tab);
+
+  // Ativar a aba.
+  this.activateTab(id);
+
+  // Retornar objeto da aba.
+  return tab;
+};
+
+/**
+ * Adiciona uma aba de formulário ao componente.
+ * @param title Título da aba.
+ * @param formId ID do formulário.
+ * @param filter Filtro do formulário.
+ */
+HTMLTabComponent.prototype.addFormTab = async function(title, formId, filter) {
+  let object = this;
+
+  // Verificar se foi especificado o GUID do formulário ou
+  // se o título não foi especificado.
+  if (!/^\d+$/g.test(formId) || !title || title.length === 0) {
+    try {
+      // Obter as informações do formulário.
+      let formInfo = await this.getFormsInfos([formId]);
+
+      // Verificar se o formulário foi encontrado.
+      if (formInfo && formInfo.length > 0) {
+        // Definir o código do formulário e o título da aba.
+        formId = formInfo[0].code;
+        if (!title || title.length === 0) title = formInfo[0].description;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  // Verificar se já existe uma aba com o ID especificado.
+  if (this.getTabByFormId(formId)) {
+    // Ativar a aba.
+    this.activateFormTab(formId);
+    return;
+  }
+
+  // Adicionar aba.
+  let tab = this.addTab(
+    /* ID: */ "form-" + this.adjustFormCode(formId),
+    /* Título: */ title,
+    /* Ação de Desdocar: */ function() {
+      // Abrir o formulário desdocado.
+      object.openUndockedForm(formId, filter);
+
+      // Fechar aba.
+      object.removeFormTab(formId);
+    },
+    /* Ação de Atualizar: */ function() {
+      // Atualizar formulário.
+      object.updateFormTab(formId, filter);
+    }
+  );
+
+  // Verificar se possui evento ao clicar.
+  if (this.AoClicar) {
+    // Associar evento ao clicar.
+    tab.tabButtonElement.addEventListener("click", function() {
+      // Chamar o evento ao clicar.
+      object.AoClicar(formId, title);
+    });
+  }
+
+  // Abrir formulário na aba.
+  this.updateFormTab(formId, filter);
+};
+
+/**
+ * Obtém uma aba pelo seu ID.
+ * @param id ID da aba.
+ * @returns Objeto da aba com o ID especificado, ou nulo se não for encontrada.
+ */
+HTMLTabComponent.prototype.getTabById = function(id) {
+  // Percorrer as abas abertas.
+  for (let i = 0; i < this.openTabs.length; i++) {
+    // Verificar se a aba aberta é a desejada.
+    if (this.openTabs[i].id === id) {
+      return this.openTabs[i];
+    }
+  }
+
+  // Retornar nulo.
+  return null;
+};
+
+/**
+ * Obtém uma aba pelo ID do formulário.
+ * @param formId ID do formulário.
+ * @returns Objeto da aba com o ID especificado, ou nulo se não for encontrada.
+ */
+HTMLTabComponent.prototype.getTabByFormId = function(formId) {
+  return this.getTabById("form-" + this.adjustFormCode(formId));
+};
+
+/**
+ * Obtém uma aba pelo seu título
+ * @param title Título da aba.
+ * @returns Objeto da aba com o título especificado, ou nulo se não for encontrada.
+ */
+HTMLTabComponent.prototype.getTabByTitle = function(title) {
+  // Percorrer as abas abertas.
+  for (let i = 0; i < this.openTabs.length; i++) {
+    // Verificar se a aba aberta é a desejada.
+    if (this.openTabs[i].title === title) {
+      return this.openTabs[i];
+    }
+  }
+
+  // Retornar nulo.
+  return null;
+};
+
+/**
+ * Atualiza o conteúdo de uma aba de formulário.
+ * @param formId ID do formulário.
+ * @param filter Filtro do formulário.
+ */
+HTMLTabComponent.prototype.updateFormTab = function(formId, filter) {
+  // Obter a aba do formulário.
+  let tab = this.getTabByFormId(formId);
+  if (tab && tab.tabContentElement) {
+    // Limpar conteúdo da aba.
+    tab.tabContentElement.innerHTML = "";
+
+    // Verificar se foi especificado o ID do formulário.
+    let isFormID = /^\d+$/g.test(formId);
+
+    // Criar iframe do formulário.
+    let formIframe = document.createElement("iframe");
+    formIframe.className = "w-100 h-100 border-0 m-0 p-0"; // Bootstrap
+    formIframe.src = "form" + PAGES_EXTENSION +
+      "?sys=" + URLEncode(this.sys) +
+      "&action=openform" +
+      (isFormID ?
+        ("&formID=" + URLEncode(formId)) :
+        ("&formGUID=" + URLEncode(formId))) +
+      (filter ? ("&filter=" + filter) : "");
+    formIframe.setAttribute("frameborder", "0");
+    formIframe.setAttribute("scrolling", "no");
+    formIframe.componentName = this.id;
+    formIframe.componentType = this.name;
+    tab.tabContentElement.appendChild(formIframe);
+
+    return true;
+  }
+
+  return false;
+};
+
+/**
+ * Ativa uma aba do componente.
+ * @param id ID da aba a ser ativada.
+ */
+HTMLTabComponent.prototype.activateTab = function(id) {
+  // Verificar se a aba existe.
+  let tab = this.getTabById(id);
+  if (tab && tab.tabTrigger) {
+    // Ativar a aba.
+    tab.tabTrigger.show();
+    this.activeTab = tab;
+  }
+};
+
+/**
+ * Ativa uma aba de formulário do componente.
+ * @param formId ID do formulário relacionado a da aba a ser ativada.
+ */
+HTMLTabComponent.prototype.activateFormTab = function(formId) {
+  // Verificar se a aba existe.
+  let tab = this.getTabByFormId(formId);
+  if (tab && tab.tabTrigger) {
+    // Ativar a aba.
+    tab.tabTrigger.show();
+  }
+};
+
+/**
+ * Remove uma aba do componente.
+ * @param id ID da aba a ser removida.
+ */
+HTMLTabComponent.prototype.removeTab = function(id) {
+  // Obter a aba pelo seu ID.
+  let tab = this.getTabById(id);
+
+  // Verificar se a aba existe.
+  if (tab) {
+    // Destruir aba do Bootstrap.
+    if (tab.tabTrigger) tab.tabTrigger.dispose();
+
+    // Remover a aba.
+    if (tab.tabElement) this.tabsDiv.removeChild(tab.tabElement);
+    if (tab.tabContentElement) this.tabsContent.removeChild(tab.tabContentElement);
+
+    // Remover a aba do array de abas abertas.
+    this.openTabs.splice(this.openTabs.indexOf(tab), 1);
+
+    // Verificar se a aba removida era a ativa.
+    if (this.activeTab === tab) {
+      // Ativar a última aba aberta.
+      if (this.openTabs.length > 0) {
+        this.activateTab(this.openTabs[this.openTabs.length - 1].id);
+      } else {
+        this.activeTab = null;
+      }
+    }
+
+    return true;
+  }
+
+  return false;
+};
+
+/**
+ * Remove uma aba de formulário do componente.
+ * @param formId ID do formulário.
+ */
+HTMLTabComponent.prototype.removeFormTab = function(formId) {
+  return this.removeTab("form-" + this.adjustFormCode(formId));
+};
+
+/**
+ * Remove uma aba do componente pelo seu título.
+ * @param title Título da aba a ser removida.
+ */
+HTMLTabComponent.prototype.removeTabByTitle = function(title) {
+  // Obter a aba pelo seu título.
+  let tab = this.getTabByTitle(title);
+
+  // Verificar se a aba existe.
+  if (tab) {
+    // Remover a aba.
+    return this.removeTab(tab.id);
+  }
+
+  return false;
+};
+
+/**
+ * Obtém a URL base dos pedidos do componente.
+ **/
+HTMLTabComponent.prototype.getRequestURL = function() {
+  let params = "";
+
+  if (d.t && d.t.dependences) {
+    let components = d.t.dependences[this.code];
+    if (components && components.length > 0) {
+      for (let code in components) {
+        if (isNumeric(code)) {
+          let component = eval("$mainform().d.c_" + components[code]);
+          if (component) {
+            params +=
+              "&WFRInput" +
+              component.getCode() +
+              "=" +
+              URLEncode(component.getValue(), "GET");
+          }
+        }
+      }
+    }
+  }
+
+  return (
+    "componentData.do?action=componentData&sys=" +
+    URLEncode(this.sys, "GET") +
+    "&formID=" +
+    URLEncode(this.formID, "GET") +
+    "&comID=" +
+    URLEncode(this.code, "GET") +
+    params
+  );
+};
+
+/**
+ * Envia uma requisição para o servidor.
+ * @param type Tipo de requisição.
+ * @param formId ID do formulário.
+ * @param params Parâmetros adicionais da requisição.
+ */
+HTMLTabComponent.prototype.sendRequest = function(type, formId, params) {
+  return new Promise((resolve, reject) => {
+    // Criar XHR para enviar a requisição.
+    let xhr = new XMLHttpRequest();
+
+    // Definir tipo e URL da conexão.
+    xhr.open("GET",
+      this.getRequestURL() +
+      "&type=" + URLEncode(type) +
+      "&target=" + URLEncode(formId) +
+      (params ? "&" + params : ""),
+      false);
+
+    xhr.addEventListener("load", function() {
+      try {
+        if (xhr.status === 200) {
+          resolve(JSON.parse(xhr.responseText));
+        } else {
+          // Chamar callback de erro.
+          reject(new Error(xhr.responseText));
+        }
+      } catch (e) {
+        // Chamar callback de erro.
+        reject(e);
+      }
+    });
+
+    // Associar evento de erro.
+    xhr.addEventListener("error", function(e) {
+      // Chamar callback de erro.
+      reject(e);
+
+      // Exibir mensagem de falha de conexão.
+      interactionError(safeGetLocaleMessage("ERROR.CONNECTION_FAIL"));
+    });
+
+    // Enviar requisição.
+    xhr.send();
+  });
+};
+
+/**
+ * Obtém a lista de informações dos formulários.
+ * @param forms Lista de IDs dos formulários para obter suas informações.
+ */
+HTMLTabComponent.prototype.getFormsInfos = function(forms) {
+  return this.sendRequest("getforminfo", forms.join(","))
+    .then((response) => response.forms);
+};
+
+/**
+ * Abre o formulário desdocado.
+ * @param formId ID do formulário.
+ * @param filter Filtro do formulário.
+ */
+HTMLTabComponent.prototype.openUndockedForm = function(formId, filter) {
+  // Verificar se possui filtro.
+  if (filter && typeof filter === "string" && filter.trim().length > 0) {
+    // Abrir formulário filtrado.
+    this.sendRequest("openform", formId, filter ? ("filter=" + filter) : "").then((response) => {
+      if (response.script) {
+        eval(response.script);
+      }
+    });
+  } else {
+    // Abrir formulário.
+    ebfFormOpenForm(formId);
+  }
+};
+
+/**
+ * Ajusta o ID do formulário para ser usado como ID de aba.
+ * As vezes pode ser passado o GUID do formulário, então é necessário
+ * ajustar para remover seus brackets.
+ * @param formId ID do formulário.
+ */
+HTMLTabComponent.prototype.adjustFormCode = function(formId) {
+  if (typeof formId === "number") formId = formId.toString();
+  return formId.trim().replace("{", "").replace("}", "");
+};
+
+HTMLTabComponent.prototype.isDevelopmentMode = function() {
+  // Verificar se está no modo desenvolvedor.
+  if (typeof d !== "undefined") {
+    return d.n.developmentMode;
+  } else if (typeof principal !== "undefined" && principal && principal.d) {
+    return principal.d.n.developmentMode;
+  } else if ($mainform() && $mainform().principal) {
+    return $mainform().principal.d.n.developmentMode;
+  } else if ($mainform()) {
+    return $mainform().d
+      ? ($mainform().d.n ? $mainform().d.n.developmentMode : false)
+      : ($mainform().mainform && $mainform().mainform.d && $mainform().mainform.d.n) ? $mainform().mainform.d.n.developmentMode : false;
+  }
+
+  return false;
+};
+
+HTMLTabComponent.prototype.closeTabWithMiddleMouseButton = function(event) {
+
+  if (event.button === 1 && this.hasCloseButton) {
+    event.preventDefault();
+  
+    // Encontra o elemento .nav-link mais próximo do evento clicado
+    const target = event.target.closest('.nav-link');
+  
+    // Verifica se o elemento existe
+    if (!target) {
+      return;
+    }
+  
+    // extrai o ID do elemento clicado
+    const { id } = target;
+  
+    // Remove a guia, se ela existir
+    this.removeTab(id);
+  }
+}
+
+HTMLTabComponent.prototype.toPermissionMode = function() {
+  // Criar botão que fará o popover de permissões do componente
+  this.openPermissionButton = document.createElement("button");
+  this.openPermissionButton.className = "position-relative btn"; // Bootstrap
+  this.openPermissionButton.type = "button";
+  this.openPermissionButton.style.cursor = "pointer";
+  this.openPermissionButton.style.order = 1;
+  this.openPermissionButton.style.zIndex = this.div.style.zIndex ? (parseInt(this.div.style.zIndex) + 1).toString() : "100000";
+  this.openPermissionButton.setAttribute("data-bs-toggle", "popover"); // Bootstrap
+  this.openPermissionButton.setAttribute("title", this.name); // Bootstrap
+  this.openPermissionButton.setAttribute("data-bs-content",
+  '<ul class="list-group list-group-flush p-0">' +
+    '<li class="list-group-item py-1"><b>' + getLocaleMessage("LABEL.FORM") + ':</b> ' + this.formID + '</li>' +
+    '<li class="list-group-item py-1"><b>' + getLocaleMessage("LABEL.CODE") + ':</b> ' + this.code + '</li>' +
+    '<li class="list-group-item py-1"><b>ID:</b> ' + this.id + '</li>' +
+    '<li class="list-group-item py-1"><b>' + getLocaleMessage("LABEL.DESCRIPTION") + ':</b> ' + this.description + '</li>' +
+  '</ul>'); // Bootstrap
+
+  this.openPermissionButtonIcon = document.createElement("i");
+  this.openPermissionButtonIcon.className = "fas fa-key"; // Font Awesome
+  this.openPermissionButton.appendChild(this.openPermissionButtonIcon);
+
+  // Adicionar botão a ul do componente TAB
+  this.innerDiv.firstElementChild.appendChild(this.openPermissionButton);
+
+  // Inicializar o popover do Bootstrap.
+  bootstrap.Popover.getOrCreateInstance(this.openPermissionButton, {
+  template: '<div class="popover" role="popover"><div class="popover-arrow"></div><div class="popover-inner"><h3 class="popover-header"></h3><div class="popover-body p-0"></div></div></div>',
+  html: true,
+  trigger: "hover",
+  delay: 200,
+  });
+
+  this.attachEvent(this.openPermissionButton, 'click', this.permissionClick);
+};

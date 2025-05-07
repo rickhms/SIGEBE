@@ -1,0 +1,649 @@
+/** 
+ * Classe responsável pela renderização do componente na camada cliente.
+ * @author Amilton Junior
+ * @version 2.0 - 2022-08-23
+ * 
+ * Revisão: Janpier Pinto - 2022-09-06
+ */
+
+function HTMLCard(sys, formID, code, posX, posY, height, width, description, value) {
+  this.create(sys, formID, code, posX, posY, height, width, description, value);
+  this.nodesc = false;
+}
+
+HTMLCard.inherits(HTMLGroupBox);
+HTMLCard.prototype.name = "HTMLCard";
+HTMLCard.prototype.instance = HTMLCard;
+
+HTMLCard.prototype.afterInit = function() {
+  this.callMethod(HTMLElementBase, "afterInit", []);
+};
+
+HTMLCard.prototype.setFont = function(font) {
+  this.callMethod(HTMLElementBase, "setFont", [font]);
+  if (this.div) this.div.style.fontFamily = font;
+};
+
+HTMLCard.prototype.setSize = function(size) {
+  this.callMethod(HTMLElementBase, "setSize", [size]);
+  if (size.toString().indexOf("pt") == -1) size += "pt";
+  if (this.div) this.div.style.fontSize = size;
+};
+
+HTMLCard.prototype.setWeight = function(weight) {
+  this.callMethod(HTMLElementBase, "setWeight", [weight]);
+  if (this.div) {
+    if (weight) this.div.style.fontWeight = "bold";
+    else this.div.style.fontWeight = "normal";
+  }
+};
+
+HTMLCard.prototype.setItalic = function(italic) {
+  this.callMethod(HTMLElementBase, "setItalic", [italic]);
+  if (this.div) {
+    if (italic) this.div.style.fontStyle = "italic";
+    else this.div.style.fontStyle = "normal";
+  }
+};
+
+HTMLCard.prototype.setTextDecoration = function() {
+  this.callMethod(HTMLElementBase, "setTextDecoration", []);
+  var textDecoration = "";
+  if (this.underline || this.strikeout) {
+    if (this.underline) textDecoration += "underline";
+    if (this.strikeout) textDecoration += " line-through";
+  } else 
+    textDecoration = "none";
+  if (this.div) this.div.style.textDecoration = textDecoration;
+};
+
+HTMLCard.prototype.designComponent = function() {
+  this.createLayout()
+
+  const card = this;
+
+  //Executa o getContentRequest async devido à chamada do método no addComponentDependences que é executado após o design do componente.
+  setTimeout(function() {
+    card.getContentRequest();
+  }, 0);
+
+};
+
+HTMLCard.prototype.getContentRequest = function() {
+  let card = this;
+  this.sendRequest(this.getEndpoint("componentData.do?action=componentData", "c"), "", (response) => {
+    card.updateLayout();
+
+    if (card.cardEditable && card.cardEditable === "true") {
+      card.buttonAddCard(card.div);
+    }
+    if(response){
+      let array_query = JSON.parse(response).sql;
+      for (const cardParams of array_query) {
+        card.createCardProperties(
+          cardParams.id,
+          cardParams.title,
+          cardParams.bodyTitle,
+          cardParams.body,
+          cardParams.footer,
+          cardParams.image
+        );
+      }
+    }
+  }, null, null, "application/x-www-form-urlencoded");
+};
+
+/**
+ * Atualiza a imagem do componente.
+ * @author marcos.reis
+ */
+HTMLCard.prototype.refresh = function() {
+  if (this.hasData) {
+    this.getContentRequest();
+  }
+};
+
+HTMLCard.prototype.addEventOnCard = function(event, flow, params) {
+  if (!event) event = "click";
+  if (flow) {
+    flow = reduceVariable(flow);
+    this.div.addEventListener(event, function() {
+      ebfFlowExecute(flow, params);
+    }, false);
+
+    if (event.toLowerCase() == "click") {
+      this.div.style.cursor = "pointer";
+    }
+  }
+};
+
+HTMLCard.prototype.fillOutCard = function(title, bodyTitle, bodyText, footerText, image) {
+  if (title) this.title = title;
+  if (bodyTitle) this.bodyTitle = bodyTitle;
+  if (bodyText) this.bodyText = bodyText;
+  if (footerText) this.footerText = footerText;
+  if (image) this.urlImage = image;
+  this.updateLayout();
+};
+
+HTMLCard.prototype.createElementWithClass = function(elem, className) {
+  let element = document.createElement(elem);
+  element.className = className;
+  return element;
+};
+
+HTMLCard.prototype.createHeader = function(elem) {
+  if (this.title) {
+    this.cardHeader = this.createElementWithClass("div", "card-header");
+    this.cardHeader.style.flex = "0 0 auto";
+
+    this.headerTitle = this.createElementWithClass("label", "d-block mb-0");
+    this.headerTitle.innerHTML = this.title;
+    this.cardHeader.appendChild(this.headerTitle);
+
+    if (elem) elem.prepend(this.cardHeader);
+  }
+};
+
+HTMLCard.prototype.createBody = function(elem) {
+  if (this.hasContent(this.bodyText) || this.hasContent(this.bodyTitle)) {
+    this.cardBody = this.createElementWithClass("div", "card-body flex-fill overflow-auto");
+    elem.appendChild(this.cardBody);
+  }
+};
+
+HTMLCard.prototype.createBodyTitle = function(elem) {
+  this.cardBodyTitle = this.createElementWithClass("h5", "card-title mb-1");
+  this.cardBodyTitle.innerHTML = this.bodyTitle;
+  if (elem) elem.prepend(this.cardBodyTitle);
+};
+
+HTMLCard.prototype.createBodyText = function(elem) {
+  if (this.hasContent(this.bodyText)) {
+    this.cardBodyText = this.createElementWithClass("p", "card-text");
+    this.cardBodyText.innerHTML = this.bodyText;
+    if (elem) elem.prepend(this.cardBodyText);
+  }
+};
+
+HTMLCard.prototype.createFooter = function(elem) {
+  if (this.hasContent(this.footerText)) {
+    this.cardFooter = this.createElementWithClass("div", "card-footer");
+    this.cardFooter.innerHTML = this.footerText;
+    if (elem) elem.appendChild(this.cardFooter);
+  }
+};
+
+HTMLCard.prototype.hasImage = function() {
+  return this.hasContent(this.urlImage) || this.hasContent(this.bodyImage);
+};
+
+HTMLCard.prototype.createImage = function() {
+  if (this.imagePosition == "top") {
+    this.img = this.createElementWithClass("img", "card-img-top p-0 h-auto w-100");
+    this.img.style.maxHeight = (this.numberOfColumns > 0 && this.cardsHeight <= 0) ? (this.height + "px") : "50%";
+    this.card.prepend(this.img);
+  } else if (this.imagePosition == "bottom") {
+    this.img = this.createElementWithClass("img", "card-img-bottom p-0 h-auto w-100");
+    this.img.style.maxHeight = (this.numberOfColumns > 0 && this.cardsHeight <= 0) ? (this.height + "px") : "50%";
+    this.card.appendChild(this.img);
+  } else {
+    this.img = this.createElementWithClass("img", "p-0 w-100 h-100");
+    this.imageHouse.appendChild(this.img);
+  }
+
+  this.img.style.objectFit = this.imageDisplay ? this.imageDisplay : "cover";
+  this.setImageSource();
+};
+
+HTMLCard.prototype.setImageSource = function() {
+  if (this.urlImage) {
+    this.img.src = this.urlImage;
+  } else if (this.bodyImage) {
+    this.img.src = this.getImageSourceURL(this.bodyImage);
+  }
+};
+
+HTMLCard.prototype.drawCard = function(card) {
+  this.createBody(card);
+  if (this.hasContent(this.title)) this.createHeader(card, this.title);
+  if (this.hasContent(this.bodyText)) this.createBodyText(this.cardBody, this.bodyText);
+  if (this.hasContent(this.bodyTitle)) this.createBodyTitle(this.cardBody, this.bodyTitle);
+  if (this.hasContent(this.footerText)) this.createFooter(card, this.footerText);
+};
+
+HTMLCard.prototype.designCardWithImage = function() {
+  if (this.imagePosition  == "left" || this.imagePosition == "right") {
+    this.cardBodyRow = this.createElementWithClass("div", "row g-0 flex-fill h-100 overflow-hidden");
+    this.card.prepend(this.cardBodyRow);
+    this.imageHouse = this.createElementWithClass("div", "col-sm-4 overflow-hidden h-sm-100");
+    this.textHouse = this.createElementWithClass("div", "col-sm-8 d-flex flex-column flex-fill mh-100 overflow-hidden");
+    this.drawCard(this.textHouse);
+    this.cardBodyRow.prepend((this.imagePosition === "right") ? this.textHouse : this.imageHouse);
+    this.cardBodyRow.appendChild((this.imagePosition === "right") ? this.imageHouse : this.textHouse);
+  } else {
+    this.drawCard(this.card);
+  }
+  this.createImage();
+};
+
+HTMLCard.prototype.hasContent = function(content) {
+  return content && content.toString().trim().length > 0;
+};
+
+HTMLCard.prototype.addData = function(title, bodyTitle, bodyText, footerText, image) {
+  let card = this;
+
+  if(image){
+    this.sendRequest(this.getEndpoint("fileUpload.do?action=fileUpload", "i"), "", (response) => {
+      response = JSON.parse(response);
+      if (response.imagePath) {
+        card.urlImage = response.imagePath;
+        this.sendData(card, title, bodyTitle, bodyText, footerText, response.imagePath);
+      }
+    }, "", image);
+  } else {
+    this.sendData(card, title, bodyTitle, bodyText, footerText, image);
+  }
+};
+
+HTMLCard.prototype.createLayout = function() {
+  if (this.hasData) {
+    if (this.numberOfColumns > 0) {
+      this.div.style.overflowX = "hidden";
+      this.div.style.overflowY = "auto";
+    } else {
+      this.div.className += " overflow-auto";
+    }
+
+    this.innerDiv = document.createElement("div");
+    this.innerDiv.className = (this.numberOfColumns > 0) ?
+      "row row-cols-1 row-cols-md-" + this.numberOfColumns + " g-4" :
+      "d-flex flex-row w-auto h-100";
+    this.div.appendChild(this.innerDiv);
+  } else {
+    if (!this.div.classList.contains("d-flex","flex-column")) {
+      this.div.className += " d-flex flex-column";
+    }
+    this.createCard();
+    if(this.AoPreencher && !this.AoPreencherCalled) {
+      this.AoPreencherCalled = true;
+      let fillEventReturn = this.AoPreencher(this.card);
+      if (Array.isArray(fillEventReturn)) {
+        const [title, bodyTitle, bodyText, footerText, image] = fillEventReturn;
+        this.fillOutCard(title, bodyTitle, bodyText, footerText, image);
+      }
+    }
+  }
+};
+
+HTMLCard.prototype.updateLayout = function() {
+  this.div.innerHTML = "";
+  this.createLayout();
+};
+
+HTMLCard.prototype.sendData = function(card, title, bodyTitle, bodyText, footerText, imagePath) {
+  card.sendRequest(card.getEndpoint("componentData.do?action=componentData","a"), {
+    title,
+    bodyTitle,
+    bodyText,
+    footerText,
+    imagePath
+  }, (response) => {
+      if (card.getStatusResponse(response)) {
+        let msg = new HTMLMessage();
+        msg.showSuccessMessage(getLocaleMessage("LABEL.MESSAGE"), getLocaleMessage("LABEL.CARD_REGISTRY_SAVED") + "!", 3);
+        card.refresh();
+      }
+  }, (error) => {
+      let msg = new HTMLMessage();
+      msg.showSuccessMessage(getLocaleMessage("LABEL.MESSAGE"), error, 3);
+  }, null, "application/x-www-form-urlencoded");
+}
+
+HTMLCard.prototype.sendRequest = function(url, params, cbSuccess, cbError, image, contentType) {
+  let xhr = new XMLHttpRequest();
+
+  if (d.t && d.t.dependences) {
+    var components = d.t.dependences[this.code];
+    if (components && components.length > 0) {
+      for (var code in components) {
+        if (isNumeric(code)) {
+          var component = eval("$mainform().d.c_" + components[code]);
+          if (component) url += ("&WFRInput" + component.getCode() + "=" + URLEncode(component.getValue(), "GET"));
+        }
+      }
+    }
+  }
+
+  xhr.open("POST", url, true);
+  if(contentType)
+    xhr.setRequestHeader("Content-Type", contentType);
+
+  xhr.addEventListener("load", function() {
+    if (xhr.readyState === 4 || xhr.status >= 200 && xhr.status <= 299) {
+      if (cbSuccess) cbSuccess(xhr.responseText);
+    } else {
+      let msg = new HTMLMessage();
+      msg.showErrorMessage(safeGetLocaleMessage("LABEL.ERROR"), safeGetLocaleMessage("ERROR.OPERATION_ERROR"));
+    }
+  });
+
+  xhr.addEventListener("error", function(e) {
+    if (cbError) cbError(e);
+    interactionError(safeGetLocaleMessage("ERROR.CONNECTION_FAIL"));
+  });
+
+  xhr.send(this.processData(image, params));
+};
+
+HTMLCard.prototype.processData = function(image, params){
+  let data = null;
+  if(image) {
+    data = this.getFormData(image);
+  } else if (params) {
+    data = "";
+    var keys = Object.keys(params);
+    for (var i = 0; i < keys.length; i++) {
+      data += keys[i] + "=" + URLEncode(params[keys[i]]);
+      if (i < keys.length) data += "&";
+    }
+  }
+  return data;
+}
+
+HTMLCard.prototype.getStatusResponse = function(response) {
+  try {
+    if (response && response.length > 0) {
+      response = JSON.parse(response);
+      if (response.error) {
+        let msg = new HTMLMessage();
+        msg.showErrorMessage(safeGetLocaleMessage("ERROR.OPERATION_ERROR"), response.message ? response.message : null, null, response.details ? response.details : null);
+        return false;
+      }
+    }
+  } catch (e) { }
+  return true;
+};
+
+HTMLCard.prototype.filling = function() {
+  if (this.onFilling) {
+    let dataArray = this.onFilling();
+    if (dataArray && Array.isArray(dataArray)) {
+      if (dataArray.length >= 1) this.title = dataArray[0];
+      if (dataArray.length >= 2) this.bodyTitle = dataArray[1];
+      if (dataArray.length >= 3) this.bodyText = dataArray[2];
+      if (dataArray.length >= 4) this.footerText = dataArray[3];
+      if (dataArray.length >= 5) this.bodyImage = dataArray[4];
+
+      if (this.loading == "async")
+        this.designComponent();
+    }
+  }
+};
+
+HTMLCard.prototype.hasEditForm = function() {
+  return this.cardForm && this.cardForm.toString().trim().length > 0;
+};
+
+HTMLCard.prototype.openEditForm = function(type) {
+  if (this.hasEditForm()) {
+    let url = getAbsolutContextPath() +
+      "componentData.do?action=componentData&sys=" + URLEncode(this.sys, "GET") +
+      "&formID=" + URLEncode(this.formID, "GET") +
+      "&comID=" + URLEncode(this.code, "GET");
+
+    if (type == 0) url += "&type=a";
+    else if (type == 1) url += "&req=" + "&type=o";
+
+    getAndEvalSync2(url);
+  } else {
+    this.createModal();
+  }
+};
+
+HTMLCard.prototype.uploadAction = function() {
+  this.uploadWindow = openUpload(this.sys, this.formID, this.code, "1", false, false);
+};
+
+HTMLCard.prototype.modalCreateElements = function(elem, type, parent, attribute, attributeValue, className, content, id, disabled) {
+  let element = document.createElement(elem);
+  if(type) element.type = type;
+  if(attribute && attributeValue) element.setAttribute(attribute, attributeValue);
+  if(className) element.className = className;
+  if(content) element.innerHTML = content;
+  if(id) element.id = id;
+  if(disabled) element.disabled = disabled;
+  parent.appendChild(element);
+  return element;
+};
+
+HTMLCard.prototype.createModal = function(e) {
+  let card = this;
+  let modal = ebfBootstrapCreateModal(getLocaleMessage("LABEL.CARD_FILLOUT_CARD"), true, null, null, null, document.body);
+
+  let modalDiv = modal[0];
+  let modalBody = modal[2];
+  let modalFooter = modal[3];
+
+  this.modalCreateElements("label", "", modalBody, "for", (modalDiv.id + "-title"), "", getLocaleMessage("LABEL.CARD_TITLE"));
+  let inputTitle = this.modalCreateElements("input", "text", modalBody, "", "", "form-control mb-3", "", modalDiv.id + "-title", !this.hasTitle);
+  this.modalCreateElements("label", "", modalBody, "for", (modalDiv.id + "-bodyTitle"), "", getLocaleMessage("LABEL.CARD_BODY_TITLE"));
+  let inputBodyTitle = this.modalCreateElements("input", "text", modalBody, "", "", "form-control mb-3", "", modalDiv.id + "-bodyTitle", !this.hasBodyTitle);
+  this.modalCreateElements("label", "", modalBody, "for", (modalDiv.id + "-bodyText"), "", getLocaleMessage("LABEL.CARD_TEXT_BODY"));
+  let inputBodyText = this.modalCreateElements("textarea", "text", modalBody, "", "", "form-control mb-3", "", modalDiv.id + "-bodyText", !this.hasBodyText); 
+  inputBodyText.setAttribute("rows", 3);
+  inputBodyText.setAttribute("cols", 10);
+  inputBodyText.style.resize = "none";
+
+  this.modalCreateElements("label", "", modalBody, "for", (modalDiv.id + "-footerText"), "", getLocaleMessage("LABEL.CARD_TEXT_FOOTER"));
+  let inputFooter = this.modalCreateElements("input", "text", modalBody, "", "", "form-control mb-3", "", modalDiv.id + "-footerText", !this.hasFooter);
+  this.modalCreateElements("label", "", modalBody, "for", (modalDiv.id + "-imageCard"), "", getLocaleMessage("LABEL.IMAGE"));
+  let inputImage = this.modalCreateElements("input", "file", modalBody, "", "", "form-control mb-3", "", modalDiv.id + "-imageCard");
+  inputImage.setAttribute("accept", "image/*");
+  if(!this.hasBodyImage) inputImage.disabled = !this.hasBodyImage;
+
+  let cancelButton = this.modalCreateElements("button", "button", modalFooter, "data-dismiss", "modal", "btn btn-secondary float-right", getLocaleMessage("LABEL.CANCEL"));
+  cancelButton.addEventListener("click", () => {
+    ebfBootstrapCloseModal(modalDiv);
+  });
+
+  let addButton = this.modalCreateElements("button", "button", modalFooter, "data-dismiss", "modal", "btn btn-primary float-right mr-2", getLocaleMessage("LABEL.ADD"));
+  addButton.addEventListener("click", () => {
+    card.addData(inputTitle.value, inputBodyTitle.value,
+      inputBodyText.value, inputFooter.value, inputImage.files[0]);
+
+    ebfBootstrapCloseModal(modalDiv);
+  });
+};
+
+HTMLCard.prototype.getFormData = function(file) {
+  let formData = new FormData();
+  formData.append("upload1", file);
+  return formData;
+};
+
+HTMLCard.prototype.getEndpoint = function(uri, type) {
+  return uri + "&sys=" + URLEncode(this.sys, "GET") 
+    + "&formID=" + URLEncode(this.formID, "GET") 
+    + "&comID=" + URLEncode(this.code, "GET") 
+    + (type ? "&type=" + type : "");
+};
+
+HTMLCard.prototype.buttonAddCard = function() {
+  this.cardAdd = this.createElementWithClass("div", "card d-flex border align-items-center justify-content-center h-100 p-4");
+  this.setBackground(this.cardAdd);
+
+  this.addButton = this.createElementWithClass("button", "btn btn-success");
+  this.addButton.type = "button";
+  this.cardAdd.appendChild(this.addButton);
+
+  this.iconPlus = this.createElementWithClass("i", "fas fa-plus");
+  this.addButton.appendChild(this.iconPlus);
+
+  if (this.numberOfColumns > 0) {
+    this.colAdd = this.createElementWithClass("div", "col");
+
+    if (this.cardsHeight && parseInt(this.cardsHeight) > 0) {
+      this.colAdd.style.height = this.cardsHeight + "px";
+      this.colAdd.style.minHeight = this.cardsHeight + "px";
+      this.colAdd.style.maxHeight = this.cardsHeight + "px";
+    } else {
+      this.colAdd.className += " mh-100";
+    }
+
+    this.colAdd.appendChild(this.cardAdd);
+    this.innerDiv.appendChild(this.colAdd);
+  } else {
+    this.cardAdd.className += " me-4";
+
+    if (this.cardsWidth && parseInt(this.cardsWidth) > 0) {
+      this.cardAdd.style.width = this.cardsWidth + "px";
+      this.cardAdd.style.minWidth = this.cardsWidth + "px";
+      this.cardAdd.style.maxWidth = this.cardsWidth + "px";
+    } else {
+      this.cardAdd.className += " mw-100";
+      this.cardAdd.style.flex = "0 0 auto";
+    }
+
+    this.innerDiv.appendChild(this.cardAdd);
+  }
+
+  this.addButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    if (this.hasEditForm()) {
+      this.openEditForm(1);
+    } else {
+      this.createModal();
+    }
+  });
+}
+
+HTMLCard.prototype.createCardProperties = function(id, title, bodyTitle, body, footer, image) {
+  this.cardId = id;
+  this.title = title;
+  this.bodyTitle = bodyTitle;
+  this.bodyText = body;
+  this.footerText = footer;
+  this.urlImage = image;
+  this.createCard();
+};
+
+HTMLCard.prototype.createCard = function() {
+  this.card = this.createElementWithClass("div", "card overflow-hidden " +
+    ((this.numberOfColumns > 0 || !this.hasData) ? "w-100 h-100" : "h-100 me-3"));
+
+  if (this.bodyImage || this.urlImage) {
+    this.designCardWithImage(this.imagePosition, this.card);
+  } else if (this.hasContent(this.title) || this.hasContent(this.bodyText) || this.hasContent(this.footerText)) {
+    this.drawCard(this.card);
+  }
+
+  this.setTextAlignment(this.card);
+  this.setBackground(this.card);
+
+  if (this.hasData) {
+    this.card.setAttribute("data-cardid", this.cardId);
+    if (this.numberOfColumns > 0) {
+      this.colCard = this.createElementWithClass("div", "col");
+
+      if (this.cardsHeight && parseInt(this.cardsHeight) > 0) {
+        this.colCard.style.height = this.cardsHeight + "px";
+        this.colCard.style.minHeight = this.cardsHeight + "px";
+        this.colCard.style.maxHeight = this.cardsHeight + "px";
+      } else {
+        this.colCard.className += " mh-100";
+      }
+
+      this.colCard.appendChild(this.card);
+      this.innerDiv.appendChild(this.colCard);
+    } else {
+      if (this.cardsWidth && parseInt(this.cardsWidth) > 0) {
+        this.card.style.width = this.cardsWidth + "px";
+        this.card.style.minWidth = this.cardsWidth + "px";
+        this.card.style.maxWidth = this.cardsWidth + "px";
+      } else {
+        this.card.className += " mw-100";
+        this.card.style.flex = "0 0 auto";
+      }
+
+      this.innerDiv.appendChild(this.card);
+    }
+
+    if(this.onclick){
+      this.card.addEventListener("click", (event) => {
+        controller.activeElement = this;
+        this.onclick(event.currentTarget.getAttribute("data-cardid"));
+      });
+
+      this.card.style.cursor = "pointer";
+
+      if(this.headerTitle)
+        this.headerTitle.style.cursor = "pointer";
+    }
+  } else {
+    this.card.className += " flex-fill";
+    this.div.appendChild(this.card);
+
+    if(this.onclick){
+      this.attachEvent(this.div, "click", this.clickAction);
+      this.div.style.cursor = "pointer";
+
+      if(this.headerTitle)
+        this.headerTitle.style.cursor = "pointer";
+    }
+  }
+};
+
+HTMLCard.prototype.setTextAlignment = function(element) {
+  if (this.textAlign === "left") {
+    element.className += " text-start";
+  } else if (this.textAlign === "right") {
+    element.className += " text-end";
+  } else if (this.textAlign === "center") {
+    element.className += " text-center";
+  }
+};
+
+HTMLCard.prototype.setBackground = function(card) {
+  const defaultColor = "#050000";
+
+  if (this.backgroundColor != defaultColor) {
+    card.style.backgroundColor = this.backgroundColor;
+  } else {
+    switch (this.boostrapStyle) {
+      case "primary":
+        card.className += " text-bg-primary";
+        break;
+      case "secondary":
+        card.className += " text-bg-secondary";
+        break;
+      case "success":
+        card.className += " text-bg-success";
+        break;
+      case "danger":
+        card.className += " text-bg-danger";
+        break;
+      case "warning":
+        card.className += " text-bg-warning";
+        break;
+      case "info":
+        card.className += " text-bg-info";
+        break;
+      case "light":
+        card.className += " text-bg-light";
+        break;
+      case "dark":
+        card.className += " text-bg-dark";
+        break;
+    }
+  }
+}
+
+HTMLCard.prototype.setHint = function(hint) {
+  this.callMethod(HTMLElementBase, "setHint", [hint, this.div]);
+};
+
+HTMLCard.prototype.toPermissionMode = function() {
+  this.callMethod(HTMLElementBase, "toPermissionMode");
+};

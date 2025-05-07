@@ -1,0 +1,129 @@
+function HTMLProgressBar(sys, code, description) {
+  this.create(sys, null, code, null, null, null, null, description, null);
+  this.percent = 0;
+  this.minValue = 0;
+  this.maxValue = 100;
+  this.closeable = true;
+  this.closed = false;
+}
+
+HTMLProgressBar.inherits(HTMLElementBase);
+HTMLProgressBar.prototype.name = "HTMLProgressBar";
+
+HTMLProgressBar.prototype.design = function(doc) {
+  // Criar modal do Bootstrap.
+  this.modal = bootstrapCreateModal(this.getDescription(), this.closeable, null, null, null, null, false, false);
+  document.body.appendChild(this.modal[0]);
+
+  // Criar o backdrop do modal.
+  this.modalBackdrop = document.createElement("div");
+  this.modalBackdrop.className = "modal-backdrop show d-block"; // Bootstrap
+  document.body.appendChild(this.modalBackdrop);
+
+  // Personalizar o modal para a barra de progresso.
+  this.modal[0].className = "modal show d-block"; // Bootstrap
+  this.modal[1].className += " px-2 pt-1 pb-2"; // Bootstrap
+  this.modal[2].className += " p-3"; // Bootstrap
+  this.modal[3].className += " d-none"; // Bootstrap
+  this.modal[4].className += " modal-sm"; // Bootstrap
+
+  // Procurar pelo elemento do título do modal.
+  this.modalTitle = this.modal[0].getElementsByClassName("modal-title");
+  if (this.modalTitle.length > 0) this.modalTitle = this.modalTitle[0];
+  else this.modalTitle = null;
+  if (this.modalTitle) this.modalTitle.className += " mt-1 h6"; // Bootstrap
+
+  // Obter o valor inicial da barra de progresso.
+  var initialValue = this.percent ? Math.min(Math.max(this.percent, this.minValue), this.maxValue) : this.minValue;
+
+  // Criar a barra de progresso no corpo do modal.
+  this.progressBar = document.createElement("div");
+  this.progressBar.className = "progress"; // Bootstrap
+  this.progressBar.setAttribute("role", "progressbar");
+  this.progressBar.setAttribute("aria-valuenow", initialValue);
+  this.progressBar.setAttribute("aria-valuemin", this.minValue);
+  this.progressBar.setAttribute("aria-valuemax", this.maxValue);
+  this.progressBar.style.height = "1.5rem";
+  this.modal[2].appendChild(this.progressBar);
+
+  this.progressBarInner = document.createElement("div");
+  this.progressBarInner.className = "progress-bar"; // Bootstrap
+  this.progressBarInner.style.width = initialValue + "%";
+  this.progressBarInner.style.transition = "none";
+  this.progressBarInner.innerText = initialValue + "%";
+  this.progressBar.appendChild(this.progressBarInner);
+
+  // Verificar se o modal é fechável.
+  if (this.closeable) {
+    // Obter o botão de fechar do modal.
+    let closeButton = this.modal[1].getElementsByClassName("btn-close");
+    if (closeButton && closeButton.length > 0) {
+      // Adicionar o evento de fechar ao botão.
+      closeButton[0].addEventListener("click", this.close.bind(this));
+    }
+  }
+};
+
+HTMLProgressBar.prototype.setPercent = function(percent) {
+  this.percent = Math.min(Math.max(percent, this.minValue), this.maxValue);
+
+  if (this.progressBar) {
+    this.progressBar.setAttribute("aria-valuenow", this.percent);
+    this.progressBar.setAttribute("aria-valuemin", this.minValue);
+    this.progressBar.setAttribute("aria-valuemax", this.maxValue);
+  }
+
+  if (this.progressBarInner) {
+    this.progressBarInner.innerText = this.percent + "%";
+    this.progressBarInner.style.width = this.percent + "%";
+  }
+};
+
+HTMLProgressBar.prototype.getPercent = function() {
+  return this.percent;
+};
+
+HTMLProgressBar.prototype.setDescription = function(description) {
+  this.description = description;
+  if (this.modalTitle) this.modalTitle.innerHTML = description;
+};
+
+HTMLProgressBar.prototype.getDescription = function() {
+  return this.description;
+};
+
+HTMLProgressBar.prototype.getForm = function() {
+  return this.form;
+};
+
+HTMLProgressBar.prototype.close = function() {
+  this.closed = true;
+
+  if (this.modalBackdrop) {
+    try {
+      if (this.modalBackdrop.remove) {
+        this.modalBackdrop.remove();
+      } else {
+        this.modalBackdrop.parentElement.removeChild(this.modalBackdrop);
+      }
+    } catch (e) { }
+
+    this.modalBackdrop = null;
+  }
+
+  if (this.modal) {
+    try {
+      if (this.modal[0].remove) {
+        this.modal[0].remove();
+      } else {
+        this.modal[0].parentElement.removeChild(this.modal[0]);
+      }
+    } catch (e) { }
+
+    this.modal = null;
+  }
+
+  this.progressBar = null;
+  this.progressBarInner = null;
+  this.modalTitle = null;
+};
